@@ -14,7 +14,7 @@
 
 ## New Cursor head SHA
 
-`60a35e6ef6cd54d9082276184d1d75774ded4d6d` (branch tip)
+`3cec7352b8864d541b6723904a204fb62d5d04de` (branch tip)
 
 ## Branch
 
