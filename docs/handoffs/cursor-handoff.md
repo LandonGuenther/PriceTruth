@@ -14,112 +14,94 @@
 
 ## New Cursor head SHA
 
-`a7a1cda84698ddfb3a43bfe220cd1739081ac150` (and any later docs-only commits on this branch)
+`89f51ae503bfca0adcb9834f8b96ad70287b5bb7` (docs-only commits may follow on this branch)
 
 ## Branch
 
 `cursor/public-beta-extension`
 
-Rebased onto `57c5059b4c780f6a48cc6684844205d6f64db4ef`. **Conflicts: none** (clean rebase; no ours/theirs resolution).
+Rebased onto `57c5059b4c780f6a48cc6684844205d6f64db4ef`. **Conflicts: none** (clean rebase).
 
 ## Owned / changed
 
-- `apps/extension/**` - API client (`ApiRateLimitedError` / `retryAfterSeconds`, request id header, observation-schema version check, additive ingest fields, HTTPS package gate, pinned MV3 public `key`)
-- `apps/api/test/security.test.ts` - allow Chrome public manifest `key` in secrets scan (false positive from the pin; not a backend architecture change)
+- `apps/extension/**` - API client (`ApiRateLimitedError` / `retryAfterSeconds`, `x-request-id`, observation-schema version check, additive ingest fields, HTTPS package gate, pinned MV3 public `key`)
+- `apps/api/test/security.test.ts` - allow Chrome public manifest `key` in secrets scan (false positive from the pin)
 - `packages/retailer-adapters/**` - unchanged this turn; still Cursor-owned
 - Extension docs + this handoff
 
 ## Devin API changes integrated
 
-From `docs/handoffs/devin-handoff.md` and live API on integrated main:
-
 - Response headers: `x-pricetruth-api-version`, `x-pricetruth-observation-schema-version`, `x-request-id`
 - Success bodies add `apiVersion: 1`
-- Ops routes confirmed: `GET /health`, `GET /readiness`
-- 429 body `{ error: "rate_limited", message, retryAfterSeconds }` mapped to `ApiRateLimitedError` (no auto-retry)
-- Ingest additive fields: `status`, `enrichment`, `apiVersion` (type-checked when present)
+- Ops routes: `GET /health`, `GET /readiness`
+- 429 body `{ error: "rate_limited", message, retryAfterSeconds }` → `ApiRateLimitedError` (no auto-retry)
+- Ingest additive: `status`, `enrichment`, `apiVersion`
 - CORS allow-list (`ALLOWED_EXTENSION_IDS`) ready for pinned id `hkpcfcjmogoaakoemandjkkdgnhpdejk`
-- `@pricetruth/shared` types: **no breaking changes**; additive fields handled in extension-local parsers
+- Shared types: no breaking changes
 
-## Observation payload (extension -> API)
+## Observation payload
 
-Posted only after confident extraction. `RetailerObservation` fields from `@pricetruth/shared`:
+Confident extraction only. Fields: `retailer`, `externalId`, `url`, `title`, optional brand/model/gtin, `priceCents`, optional reference + type, `currency`, optional stock/variant, `source`, `observedAt`, `schemaVersion`, `priceType`, `extractorVersion`.
 
-`retailer`, `externalId`, `url`, `title`, `brand`, `modelNumber`, `gtin`, `priceCents`, `referencePriceCents`, `currency`, `inStock`, `variant`, `source`, `observedAt`, `schemaVersion`, `priceType`, `referenceType`, `extractorVersion`
-
-Client version header: `x-pricetruth-client-version`.
-
-Not fabricated: confidence, trust, quarantine, enrichment outcomes.
+Client version via `x-pricetruth-client-version`. No fabricated confidence/trust/quarantine.
 
 ## Data quality
 
-Extraction failure reasons that never ingest: `not_product_page`, `no_identifier`, `no_price`, `ambiguous_price`, `invalid`.
+`not_product_page`, `no_identifier`, `no_price`, `ambiguous_price`, `invalid` never call `POST /v1/observations`.
+Backend owns trust/quarantine; extension owns safe extraction.
 
-Handler coverage confirms ambiguous/no-price paths do not call `POST /v1/observations`.
-Backend owns trust/quarantine; extension owns safe extraction only.
-
-## Shared types changed
-
-None intentionally.
-
-## Test totals
+## Test totals (re-verified after CREATEDB grant)
 
 | Suite | Result |
 | --- | --- |
-| Extension (`@pricetruth/extension`) | **50** passed |
-| Retailer adapters (`@pricetruth/retailer-adapters`) | **115** passed |
+| Extension | **50** passed |
+| Retailer adapters | **115** passed |
 | Amazon fixtures | **23** |
 | Best Buy fixtures | **15** |
+| Shared / catalog / scoring | 17 / 16 / 39 passed |
+| API | **132** passed (includes migration Path A/B) |
 | `pnpm lint` | pass |
-| `pnpm typecheck` | pass (needs `prisma generate` in this environment) |
+| `pnpm typecheck` | pass |
 | `pnpm build` | pass |
-| API unit/integration | **130** passed; migration suite blocked by env (below) |
-
-### Unrelated API failure (not caused by this branch)
-
-`apps/api/test/migration.test.ts` cannot run here: Postgres role lacks `CREATEDB` (`permission denied to create database`). Extension code is not involved. Documented only; backend architecture not modified.
+| `pnpm test` (full monorepo) | **pass** |
 
 ## Package verification
 
-- `VITE_API_BASE_URL=https://api-staging.pricetruth.example pnpm --filter @pricetruth/extension build && pnpm --filter @pricetruth/extension package && pnpm --filter @pricetruth/extension verify-package`
-- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip` (12 entries, ~91KB)
+- `VITE_API_BASE_URL=https://api-staging.pricetruth.example pnpm --filter @pricetruth/extension build && package && verify-package`
+- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip` (12 entries, 90783 bytes)
+- Permissions: `['sidePanel', 'storage']`; host_permissions: `['https://api-staging.pricetruth.example/*']`
 - Clean of localhost, `.env`, secrets, tests, fixtures, `node_modules`, source maps
-- Manifest permissions: `sidePanel`, `storage`; host_permissions only the packaging API origin
-- Stable extension id (public key): `hkpcfcjmogoaakoemandjkkdgnhpdejk`
+- Stable extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`
 
-## Runtime E2E (local merged API + DB)
+## Runtime E2E
 
-Against restarted API on integrated main + DEV DB `/pricetruth`:
+Local merged API + DB:
 
-- Valid observation -> analysis -> history: pass
-- Insufficient-history analysis (`confidence.level = "INSUFFICIENT"`): pass
-- Missing price rejected by API; client never posts ambiguous/no-price/identity failures: pass
-- Stale navigation / generation protection: pass (`handler.test.ts`)
-- Network failure classification: pass
-- Live response bodies parse through extension validators: pass
+- Valid observation → analysis → history: pass
+- Insufficient history (`confidence.level = "INSUFFICIENT"`): pass
+- Ambiguous/no-price never ingest (handler + API): pass
+- Stale navigation protection: pass
+- Live bodies parse through extension validators: pass
 
-Still manual:
-
-- Unpacked Chrome side panel on live Amazon/Best Buy PDPs (CAPTCHA/throttling risk)
+Chrome unpacked load: headless screenshot of `chrome-extension://` side panel returned `ERR_BLOCKED_BY_CLIENT` (headless extension limitation). Live Amazon/Best Buy PDP side-panel confirmation remains a manual daytime pass.
 
 ## Production / staging endpoint status
 
 - `docs/STAGING_DEPLOYMENT.md`: **PLANNED** - no staging host provisioned
-- Package gate requires non-empty HTTPS non-localhost `VITE_API_BASE_URL`
+- Package gate requires HTTPS non-localhost `VITE_API_BASE_URL`
 - Verified with placeholder `https://api-staging.pricetruth.example` only
-- Do not hard-code a fake production URL in source
+- Do not hard-code a fake production URL
 
 ## Remaining issues
 
 ### P0
 
-- None known in extension-owned code after local green runs.
+- None known in extension-owned code.
 
 ### P1
 
 - Real staging/production HTTPS origin still unpublished (blocks a real testers zip).
-- `apps/api/test/migration.test.ts` cannot `CREATE DATABASE` in this environment (blocks claiming full monorepo `pnpm test` green here).
-- Daytime manual Chrome PDP confirmation still required.
+- Manual Chrome PDP confirmation on live Amazon/Best Buy still required.
 
 ### P2
 
@@ -128,8 +110,8 @@ Still manual:
 
 ## PR posture
 
-Keep PR #8 **draft** while any P1 remains. Do not merge from the agent.
+Keep PR #8 **draft** while P1 remains (staging URL + manual PDP). Do not merge from the agent.
 
 ## Do not merge order
 
-Devin main is already merged. Cursor PR merges only after P1 clearance and reviewer approval.
+Devin main already merged. Cursor PR merges after P1 clearance and reviewer approval.
