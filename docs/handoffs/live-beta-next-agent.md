@@ -1,55 +1,34 @@
-# Live-beta handoff
+# Live-beta handoff (next agent)
 
-Current agent: https://cursor.com/agents/bc-280b9d39-9530-4944-b615-682149ad7fe2
-Branch: `cursor/live-beta-bringup`
+Status when written: **Neon LIVE / Fly BLOCKED on billing**.
+
+Agent: PriceTruth staging deployment on branch `cursor/live-beta-bringup`
 PR: https://github.com/LandonGuenther/PriceTruth/pull/11
 
-## Blocker
+## What works now
 
-`FLY_API_TOKEN` and staging `DATABASE_URL` (Neon) are **not** present in this Cloud Agent VM.
-Secrets were requested via Cursor's secure `add_secrets` flow. They inject at agent start;
-if the UI completes mid-run, confirm they appear in the env (names only) or start a fresh
-agent on this branch with the same environment.
+- Branch `cursor/live-beta-bringup` includes Devin bring-up + Cursor Fly/docs/scripts
+- Local gates green (373 tests)
+- Neon `neondb` on host `ep-sparkling-paper-aukmmxhh-pooler.c-10.us-east-1.aws.neon.tech`:
+  - Postgres 16.15, TLS, 8 migrations applied
+  - Local API against Neon: health/readiness/internal auth OK
+  - Controlled probe observation written then EXCLUDED
+  - Rollup + archive jobs succeeded against Neon
+- `flyctl` authenticated; personal org (`landonguenther00@gmail.com`) visible
+- **`fly apps create pricetruth-api-staging` fails** until billing is added:
+  https://fly.io/dashboard/personal/billing
 
-Do **not** ask the owner to paste tokens into chat.
-
-## Credential policy
-
-| Secret | Required | Notes |
-|--------|----------|-------|
-| `FLY_API_TOKEN` | yes | Personal Fly account OK |
-| `DATABASE_URL` | yes | Existing Neon `pricetruth-staging` |
-| `NEON_API_KEY` | no | Optional metadata/PITR checks |
-| `BESTBUY_API_KEY` | no | Official refresh stays NOT CONFIGURED |
-| `INTERNAL_API_TOKEN` | no | Generate at deploy; store in Fly only |
-
-## Already done
-
-- Branched from `origin/devin/live-beta-bringup` (not from main)
-- Devin: Best Buy refresh job, ops CLI, staging canary, docs, tests
-- Cursor: `fly.toml`, volume entrypoint, `staging-jobs.yml`, `scripts/deploy-staging.sh`, operator docs
-- Baseline re-verified this session: lint, typecheck, **373 tests**, build
-- Fixed `migration.test.ts` so missing `DATABASE_URL` skips cleanly
-- `flyctl` installed; deploy script ready: `./scripts/deploy-staging.sh`
-
-## Next steps once secrets are present
-
-1. Confirm `FLY_API_TOKEN` and `DATABASE_URL` are set (do not print values).
-2. Generate `INTERNAL_API_TOKEN` with `openssl rand -hex 32` if unset.
-3. Leave `BESTBUY_API_KEY` unset unless provided.
-4. From repo root on `cursor/live-beta-bringup`:
+## Immediately after Fly billing is active
 
 ```bash
+# Secrets must be in env (prefer Cursor secure secrets — do not paste into chat)
+# Required: FLY_API_TOKEN, DATABASE_URL
+# Optional: INTERNAL_API_TOKEN (else generated), BESTBUY_API_KEY
 ./scripts/deploy-staging.sh
 ```
 
-5. Continue remaining bring-up phases:
-   - public `/health` + `/readiness`
-   - internal auth checks
-   - controlled observation write → Neon → history/analysis
-   - extension build/package with real HTTPS API (no localhost)
-   - browser E2E + polite live retailer checks
-   - jobs/canary/rollup/archive
-   - restart persistence test
-   - finalize `docs/LIVE_BETA_REPORT.md` with real values
-   - push + update PR #11
+Then continue: public HTTPS checks, extension build with real URL, E2E, canary secrets, finalize `docs/LIVE_BETA_REPORT.md`, push, update PR #11.
+
+## Security
+
+Credentials were pasted into chat once. Owner should **rotate Fly token + Neon password** after staging is up. Never commit secrets.
