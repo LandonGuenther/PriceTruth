@@ -1,0 +1,83 @@
+<!doctype html>
+<!--
+  Modelled on a live /product/ PDP capture: the product's own price block sits
+  under the LARGE_profile hero, while cross-sell/carousel/sponsored tiles carry
+  their own [data-testid="price-block"] subtrees with unrelated "was" prices.
+-->
+<html lang="en">
+  <head>
+    <title>Beats Studio Pro Wireless Noise Cancelling Headphones - Best Buy</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Beats - Studio Pro - Wireless Noise Cancelling Over-the-Ear Headphones - Black",
+        "sku": "6501017",
+        "brand": { "@type": "Brand", "name": "Beats" }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Beats - Studio Pro - Wireless Noise Cancelling Over-the-Ear Headphones - Black</h1>
+    <div class="pr-200 inline-block">Model: <!-- -->192-6</div>
+    <div class="pr-200 inline-block">SKU: <!-- -->6501017</div>
+
+    <!-- a cross-sell tile that appears BEFORE the main block in document order -->
+    <div data-testid="standard-tile-carousel">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$19.99</span><span aria-hidden="true">$</span
+          ><span aria-hidden="true">19</span><span aria-hidden="true">99</span>
+        </div>
+        <div data-testid="price-block-savings">
+          <div data-testid="price-block-regular-price">
+            <span class="sr-only">The price was </span
+            ><span class="whitespace-nowrap"
+              ><span aria-hidden="true">Was<!-- --> </span><span>$19.00</span></span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- main PDP price block -->
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$249.99</span><span aria-hidden="true">$</span
+          ><span aria-hidden="true">249</span><span aria-hidden="true">99</span>
+        </div>
+        <div data-testid="price-block-savings">
+          <div data-testid="price-block-regular-price">
+            <span class="sr-only">The price was </span
+            ><span class="whitespace-nowrap"
+              ><span aria-hidden="true">Was<!-- --> </span><span>$299.99</span></span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- sponsored / related-tile blocks with their own regular prices -->
+    <div data-testid="sponsored-sbb">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$199.99</span>
+        </div>
+        <div data-testid="price-block-regular-price">
+          <span class="sr-only">The price was </span><span>$279.99</span>
+        </div>
+      </div>
+    </div>
+    <div data-testid="priceBlockTestId">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$25.99</span>
+        </div>
+        <div data-testid="price-block-regular-price">
+          <span class="sr-only">The price was </span><span>$199.99</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

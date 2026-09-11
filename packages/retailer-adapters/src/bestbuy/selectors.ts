@@ -11,6 +11,14 @@ export const BESTBUY_SELECTORS = {
   skuSpecValue: ".sku .product-data-value",
   /** New-format PDP: "SKU: 10129617" / "Model: …" label divs under the title. */
   skuLabelText: ".pr-200.inline-block",
+  /** New-format PDP price blocks; the main one must not sit in a carousel/tile. */
+  priceBlock: '[data-testid="price-block"]',
+  /** Inside the main price block: screen-reader customer price text. */
+  priceBlockCustomer: '[data-testid="price-block-customer-price"] .sr-only',
+  /** Inside the main price block: "Comp. Value" amount. */
+  priceBlockCompValue: '[data-testid="price-block-regular-price"] [data-lu-target="comp_value"]',
+  /** Inside the main price block: whole regular-price row (first $ amount). */
+  priceBlockRegular: '[data-testid="price-block-regular-price"]',
   /** "Was $X" / "Reg $X" / "Comp. Value: $X" regular price next to the sale price. */
   reference: [
     '[data-testid="price-block-regular-price"] [data-lu-target="comp_value"]',

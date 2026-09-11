@@ -8,8 +8,10 @@ import { extractFirstPrice } from "../utils.js";
 import { BESTBUY_SELECTORS as S } from "./selectors.js";
 
 const PATH_SKU = /\/site\/[^/]+\/(\d{6,8})\.p/;
-// New-format PDP: /product/<slug>/<opaque code>, e.g. /product/foo/JJGCQ88C8X
-const PATH_PRODUCT = /^\/product\/[^/]+\/[A-Z0-9]{6,12}$/i;
+// New-format PDP: /product/<slug>/<opaque code> — may be followed by more
+// path segments, e.g. /product/foo/J3GWRW4HCC/sku/6665563.
+const PATH_PRODUCT = /^\/product\/[^/]+\/[A-Z0-9]{6,12}(?:\/|$)/i;
+const PATH_PRODUCT_SKU = /^\/product\/[^/]+\/[A-Z0-9]{6,12}\/sku\/(\d{6,8})/i;
 const SKU_PATTERN = /^\d{6,8}$/;
 const SKU_LABEL = /^SKU:\s*(\d{6,8})$/i;
 
@@ -57,6 +59,8 @@ function findJsonLdProduct(doc: Document): JsonLdProduct | null {
 function extractIdFromUrl(url: URL): string | null {
   const fromPath = url.pathname.match(PATH_SKU)?.[1];
   if (fromPath) return fromPath;
+  const fromProductPath = url.pathname.match(PATH_PRODUCT_SKU)?.[1];
+  if (fromProductPath) return fromProductPath;
   const skuId = url.searchParams.get("skuId");
   return skuId && SKU_PATTERN.test(skuId) ? skuId : null;
 }
@@ -85,6 +89,31 @@ function extractSkuFromDoc(doc: Document, product: JsonLdProduct | null): string
   return null;
 }
 
+// Ancestor data-testids observed on /product/ pages that hold cross-sell,
+// carousel, sponsored or warranty-tile price blocks — not the product's price.
+const CONTAMINATED_ANCESTOR = /carousel|sponsored|accessor|cross-?sell|priceBlockTestId/i;
+
+function inContaminatedSubtree(el: Element): boolean {
+  for (let n = el.parentElement; n; n = n.parentElement) {
+    if (CONTAMINATED_ANCESTOR.test(n.getAttribute("data-testid") ?? "")) return true;
+  }
+  return false;
+}
+
+function mainPriceBlock(doc: Document): Element | null {
+  for (const el of doc.querySelectorAll(S.priceBlock)) {
+    if (!inContaminatedSubtree(el)) return el;
+  }
+  return null;
+}
+
+function firstUncontaminated(root: ParentNode, selector: string): Element | null {
+  for (const el of root.querySelectorAll(selector)) {
+    if (!inContaminatedSubtree(el)) return el;
+  }
+  return null;
+}
+
 function firstOffer(product: JsonLdProduct | null) {
   const offers = product?.offers;
   if (!offers) return undefined;
@@ -102,8 +131,14 @@ function extractPrice(
     if (cents !== null) return cents;
     warnings.push("JSON-LD offers.price did not parse");
   }
+  const block = mainPriceBlock(doc);
+  if (block) {
+    const el = block.querySelector(S.priceBlockCustomer);
+    const cents = el ? parsePriceToCents(text(el)) : null;
+    if (cents !== null) return cents;
+  }
   for (const sel of S.price) {
-    const el = doc.querySelector(sel);
+    const el = firstUncontaminated(doc, sel);
     const cents = el ? parsePriceToCents(text(el)) : null;
     if (cents !== null) return cents;
   }
@@ -112,8 +147,16 @@ function extractPrice(
 }
 
 function extractReference(doc: Document): number | null {
+  const block = mainPriceBlock(doc);
+  if (block) {
+    for (const sel of [S.priceBlockCompValue, S.priceBlockRegular]) {
+      const el = block.querySelector(sel);
+      const cents = el ? (parsePriceToCents(text(el)) ?? extractFirstPrice(text(el))) : null;
+      if (cents !== null) return cents;
+    }
+  }
   for (const sel of S.reference) {
-    const el = doc.querySelector(sel);
+    const el = firstUncontaminated(doc, sel);
     // "Was $399.99" / "Comp. Value: $274.99" — take the first $ amount.
     const cents = el ? (parsePriceToCents(text(el)) ?? extractFirstPrice(text(el))) : null;
     if (cents !== null) return cents;

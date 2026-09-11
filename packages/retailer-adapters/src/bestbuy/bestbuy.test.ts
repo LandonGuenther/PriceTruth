@@ -132,6 +132,59 @@ describe("extract", () => {
     expect(r.observation.inStock).toBe(true);
   });
 
+  it("/product/<slug>/<code>/sku/<id> URLs match and carry a URL sku", () => {
+    const url = new URL(
+      "https://www.bestbuy.com/product/shokz-openfit-pro-earbuds-black/J3GWRW4HCC/sku/6665563",
+    );
+    expect(bestbuyAdapter.matchesUrl(url)).toBe(true);
+    const bare = new DOMParser().parseFromString("<html><body></body></html>", "text/html");
+    expect(bestbuyAdapter.extractExternalId(url, bare)).toBe("6665563");
+  });
+
+  it("reviews sub-page: URL sku + still-rendered price block extract fine", () => {
+    const doc = loadFixture("product-new-url-reviews.html");
+    const url = new URL(
+      "https://www.bestbuy.com/product/airpods-pro-2/JJGCQ88C8X/sku/10129617/reviews",
+    );
+    expect(bestbuyAdapter.matchesUrl(url)).toBe(true);
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("10129617");
+    expect(r.observation.priceCents).toBe(23899);
+    expect(r.observation.referencePriceCents).toBe(27499);
+  });
+
+  it("cross-sell/carousel price blocks never leak into price or reference", () => {
+    const doc = loadFixture("product-new-url-crosssell.html");
+    const r = bestbuyAdapter.extract(
+      doc,
+      new URL("https://www.bestbuy.com/product/beats-studio-pro/JJ8ZHR9K2T/sku/6501017"),
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6501017");
+    expect(r.observation.priceCents).toBe(24999);
+    expect(r.observation.referencePriceCents).toBe(29999);
+  });
+
+  it("only-contaminated 'was' text → referencePriceCents undefined", () => {
+    const doc = loadFixture("product-new-url-crosssell.html");
+    doc
+      .querySelector('[data-testid="LARGE_profile"] [data-testid="price-block-regular-price"]')
+      ?.remove();
+    const r = bestbuyAdapter.extract(
+      doc,
+      new URL("https://www.bestbuy.com/product/beats-studio-pro/JJ8ZHR9K2T/sku/6501017"),
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(24999);
+    expect(r.observation.referencePriceCents).toBeUndefined();
+  });
+
   it("legacy URL sku vs page sku mismatch → page wins, warning emitted", () => {
     const doc = loadFixture("product-new-url-marketplace.html");
     const url = new URL("https://www.bestbuy.com/site/airpods/6447382.p?skuId=6447382");

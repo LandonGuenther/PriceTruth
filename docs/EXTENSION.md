@@ -44,9 +44,11 @@ Production builds must set it to the deployed API origin.
 - **Amazon**: `/dp/<ASIN>`, `/gp/product/<ASIN>`, `/gp/aw/d/<ASIN>` (see the
   adapter for the full pattern list).
 - **Best Buy**: legacy `/site/<slug>/<sku>.p` / `?skuId=` URLs **and** the new
-  `/product/<slug>/<code>` format. On `/product/` pages the URL carries no SKU,
-  so identity comes from the page (JSON-LD `sku`, then the "SKU: …" label); the
-  page SKU always wins over any URL-derived value.
+  `/product/<slug>/<code>` format (optionally followed by `/sku/<id>` or other
+  sub-paths like `/reviews`). The page SKU always wins over any URL-derived
+  value; on bare `/product/<code>` pages identity comes from the document
+  (JSON-LD `sku`, then the "SKU: …" label). Cross-sell, carousel and sponsored
+  price blocks are ignored when resolving the product's own price.
 
 ## Permissions rationale
 
