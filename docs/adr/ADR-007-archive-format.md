@@ -21,8 +21,9 @@ verification — without touching Postgres contents.
 - Incremental export via `JobCheckpoint "archive:observations"`; `ArchiveBatch`
   ledger table (`key` unique + sha256) makes reruns idempotent — equal sha256
   skips, mismatched sha256 throws, never overwrite.
-- Columns: every `PriceObservation` column + `retailerId` + `dataSourceKey`
-  (BigInt→INT64, timestamps→TIMESTAMP_MILLIS, enums→UTF8).
+- Columns: every immutable `PriceObservation` fact column + `retailerId` +
+  `dataSourceKey` (BigInt→INT64, timestamps→TIMESTAMP_MILLIS, enums→UTF8).
+  `status` (the only mutable column) is excluded — see ARCHIVE_FORMAT.md.
 
 ## Alternatives considered
 

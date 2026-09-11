@@ -41,8 +41,12 @@ All `PriceObservation` columns plus `retailerId` (joined from Listing) and
 - `id` INT64 (BigInt preserved)
 - `receivedAt`, `clientObservedAt`, `effectiveAt` TIMESTAMP_MILLIS (nullable
   where the column is)
-- `status`, `priceType`, `referenceType`, `currency`, ids, `clientVersion`,
+- `priceType`, `referenceType`, `currency`, ids, `clientVersion`,
   `extractorVersion`, `retailerId`, `dataSourceKey` — UTF8
+- `status` is NOT exported by design: it is the only mutable column, so a
+  status flip would change a re-export's sha256 and trip the refuse-to-
+  overwrite guard. Archiving `ObservationStatusEvent` (the status audit log)
+  is PLANNED as a separate `schema=v1/status_events/` partition family.
 - `priceCents`, `referencePriceCents`, `clientSkewSeconds`, `schemaVersion` —
   INT32; `inStock`, `synthetic` — BOOLEAN
 

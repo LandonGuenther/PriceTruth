@@ -11,7 +11,13 @@ export const ARCHIVE_SCHEMA_VERSION = 1;
 const CHECKPOINT = "archive:observations";
 const SOFTWARE_VERSION = "pricetruth-archive@1.0.0";
 
-/** Parquet schema v1: every PriceObservation column + retailerId + dataSourceKey. */
+/**
+ * Parquet schema v1: immutable PriceObservation fact columns + retailerId +
+ * dataSourceKey. `status` is deliberately excluded — it is the only mutable
+ * column, and a later status change would make a re-export of the same id
+ * range produce a different sha256 (tripping the refuse-to-overwrite guard).
+ * Archiving ObservationStatusEvent is PLANNED (docs/ARCHIVE_FORMAT.md).
+ */
 export const ARCHIVE_PARQUET_SCHEMA = new ParquetSchema({
   id: { type: "INT64" },
   listingId: { type: "UTF8" },
@@ -27,7 +33,6 @@ export const ARCHIVE_PARQUET_SCHEMA = new ParquetSchema({
   clientObservedAt: { type: "TIMESTAMP_MILLIS", optional: true },
   effectiveAt: { type: "TIMESTAMP_MILLIS" },
   clientSkewSeconds: { type: "INT32", optional: true },
-  status: { type: "UTF8" },
   synthetic: { type: "BOOLEAN" },
   schemaVersion: { type: "INT32" },
   clientVersion: { type: "UTF8", optional: true },
@@ -146,7 +151,6 @@ export async function exportObservationBatches(
       clientObservedAt: o.clientObservedAt,
       effectiveAt: o.effectiveAt,
       clientSkewSeconds: o.clientSkewSeconds,
-      status: o.status,
       synthetic: o.synthetic,
       schemaVersion: o.schemaVersion,
       clientVersion: o.clientVersion,

@@ -1214,7 +1214,7 @@ describeIfDb("api integration", () => {
           currency: "USD",
           effectiveAt: new Date(Date.parse("2026-09-09T12:00:00Z") + i * 3600_000),
           receivedAt: new Date(Date.parse("2026-09-09T12:00:00Z") + i * 3600_000),
-          status: i === 4 ? "QUARANTINED" : "ACCEPTED",
+          status: "ACCEPTED",
           schemaVersion: 1,
           synthetic: true,
         },
@@ -1261,8 +1261,9 @@ describeIfDb("api integration", () => {
       expect(back[i]!.listingId).toBe(orig[i]!.listingId);
       expect(back[i]!.priceCents).toBe(orig[i]!.priceCents);
       expect((back[i]!.effectiveAt as Date).getTime()).toBe(orig[i]!.effectiveAt.getTime());
-      expect(back[i]!.status).toBe(orig[i]!.status);
+      expect((back[i]!.receivedAt as Date).getTime()).toBe(orig[i]!.receivedAt.getTime());
       expect(back[i]!.dataSourceKey).toBe(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+      expect(back[i]).not.toHaveProperty("status"); // immutable facts only
     }
 
     // rerun: checkpoint advanced → no new files anywhere
