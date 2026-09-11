@@ -12,6 +12,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  */
 export default defineConfig({
   plugins: [react()],
+  // Relative asset URLs are required for chrome-extension:// pages. Vite's
+  // default `base: '/'` emits `/sidepanel.js`, which fails to load in the
+  // side panel and looks like a dead toolbar click (blank / no UI).
+  base: "./",
   build: {
     outDir: "dist",
     emptyOutDir: true,

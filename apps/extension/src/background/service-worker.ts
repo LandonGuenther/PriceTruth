@@ -33,7 +33,25 @@ const deps = {
   cancelSchedule: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
-void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+/**
+ * Open the side panel on toolbar click.
+ *
+ * Prefer an explicit `action.onClicked` + `sidePanel.open` path over relying
+ * solely on `setPanelBehavior({ openPanelOnActionClick })`. The behavior flag
+ * is async and can be lost if the MV3 service worker is killed before the
+ * promise settles, which presents as: toolbar icon (blue square) click does
+ * nothing. `onClicked` runs on the user gesture and opens reliably.
+ *
+ * Do not also enable openPanelOnActionClick - Chrome will not fire onClicked
+ * when that behavior is set.
+ */
+chrome.action.onClicked.addListener((tab) => {
+  if (typeof tab.windowId === "number") {
+    void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {
+      // Side panel unavailable (policy / unsupported) - nothing else to do.
+    });
+  }
+});
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender) => {
   void handleMessage(msg, sender.tab?.id, deps);

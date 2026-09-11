@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildManifest } from "../src/manifest.js";
@@ -24,6 +24,20 @@ if (existsSync(emittedHtml)) {
 } else if (!existsSync(flatHtml)) {
   throw new Error("sidepanel html missing from vite output");
 }
+
+// After flattening from dist/src/sidepanel/index.html → dist/sidepanel.html,
+// Vite's relative `base: './'` URLs are still rooted at the old depth
+// (`../../sidepanel.js`). Rewrite them to be relative to dist/. Also convert
+// any leftover root-absolute URLs and strip `crossorigin` (breaks module
+// loads on chrome-extension:// pages).
+let html = readFileSync(flatHtml, "utf8");
+html = html
+  .replaceAll('src="../../', 'src="./')
+  .replaceAll('href="../../', 'href="./')
+  .replaceAll('src="/', 'src="./')
+  .replaceAll('href="/', 'href="./')
+  .replaceAll(" crossorigin", "");
+writeFileSync(flatHtml, html);
 
 mkdirSync(path.join(appDir, "release"), { recursive: true });
 console.log(`Wrote dist/manifest.json (api origin ${apiOrigin}) and dist/sidepanel.html`);

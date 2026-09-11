@@ -8,7 +8,7 @@
 | Beta ZIP | `apps/extension/release/pricetruth-extension-0.1.0.zip` |
 | Extension version | `0.1.0` |
 | Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| ZIP SHA-256 | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
+| ZIP SHA-256 | `44234ae83a301e7f28d34e521204a9656a8072769c577ee0107c2af9737a4cba` |
 
 ## Install (Chrome)
 
@@ -18,7 +18,7 @@
 4. Click **Load unpacked** and select the unzipped folder (contains `manifest.json`).
 5. Confirm the extension id is `hkpcfcjmogoaakoemandjkkdgnhpdejk`.
 6. Open an Amazon or Best Buy product detail page (PDP).
-7. Open the PriceTruth side panel.
+7. Click the PriceTruth toolbar icon (solid blue square) to open the side panel.
 8. Confirm the visible page price matches what PriceTruth shows.
 9. Confirm an observation landed:
 
@@ -45,6 +45,8 @@ Expect health and readiness HTTP 200. Unauthenticated `/internal/status` must no
 
 | Symptom | Check |
 |---------|-------|
+| Toolbar icon (blue square) click does nothing | Remove the old unpacked extension, load the new ZIP contents, click **Reload** on `chrome://extensions`, then pin PriceTruth and click the icon again |
+| Side panel opens but is blank | Confirm `sidepanel.html` asset paths are relative (`./sidepanel.js`); rebuild if you still see `/sidepanel.js` |
 | Side panel empty / network error | Rebuild with `VITE_API_BASE_URL=https://pricetruth-api-staging.fly.dev` |
 | CORS / blocked fetch | Fly secret `ALLOWED_EXTENSION_IDS` must include `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
 | Readiness 503 | Neon connectivity or pending migrations |

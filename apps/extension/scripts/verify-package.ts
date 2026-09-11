@@ -33,6 +33,17 @@ for (const f of required) {
   if (!existsSync(path.join(dist, f))) fail(`dist missing ${f}`);
 }
 
+const sidepanelHtml = readFileSync(path.join(dist, "sidepanel.html"), "utf8");
+if (/\s(src|href)="\//.test(sidepanelHtml)) {
+  fail("sidepanel.html has root-absolute asset URLs (src|href=\"/...\"); use relative paths");
+}
+if (/\s(src|href)="\.\.\//.test(sidepanelHtml)) {
+  fail("sidepanel.html has parent-relative asset URLs (../) after flatten; expected ./ paths");
+}
+if (/\scrossorigin\b/.test(sidepanelHtml)) {
+  fail("sidepanel.html must not use crossorigin attributes on chrome-extension pages");
+}
+
 const manifest = JSON.parse(readFileSync(path.join(dist, "manifest.json"), "utf8")) as {
   host_permissions?: string[];
   permissions?: string[];

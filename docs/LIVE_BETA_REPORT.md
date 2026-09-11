@@ -60,7 +60,7 @@ awaiting owner GitHub secrets + first real retailer PDP validation in Chrome.
 | Version | `0.1.0` |
 | Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
 | Beta artifact | `apps/extension/release/pricetruth-extension-0.1.0.zip` (gitignored) |
-| SHA-256 | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
+| SHA-256 | `44234ae83a301e7f28d34e521204a9656a8072769c577ee0107c2af9737a4cba` |
 | API URL baked in | `https://pricetruth-api-staging.fly.dev` |
 | Localhost in package | **None** (verify-package passed) |
 
