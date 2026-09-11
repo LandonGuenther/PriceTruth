@@ -6,13 +6,13 @@ Out of scope: API/Prisma/scoring architecture (owned by parallel backend work)
 
 ## Baseline (pre-change)
 
-| Check | Result |
-| --- | --- |
-| `pnpm lint` | pass |
-| `pnpm typecheck` | pass |
-| `pnpm test` | pass (shared 13, scoring 34, retailer-adapters 79, extension 24, api 14) |
-| `pnpm build` | pass |
-| Bundle | content ~68KB, service-worker ~4KB, sidepanel ~148KB + observation chunk ~56KB |
+| Check            | Result                                                                         |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `pnpm lint`      | pass                                                                           |
+| `pnpm typecheck` | pass                                                                           |
+| `pnpm test`      | pass (shared 13, scoring 34, retailer-adapters 79, extension 24, api 14)       |
+| `pnpm build`     | pass                                                                           |
+| Bundle           | content ~68KB, service-worker ~4KB, sidepanel ~148KB + observation chunk ~56KB |
 
 ## Architecture snapshot
 

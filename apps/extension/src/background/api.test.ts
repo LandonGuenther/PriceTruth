@@ -169,9 +169,9 @@ describe("response parsers", () => {
   });
 
   it("parseAnalysisResponse rejects newer schemaVersion", () => {
-    expect(() =>
-      parseAnalysisResponse({ ...analysisFixture, schemaVersion: 99 }),
-    ).toThrow(ApiUnsupportedVersionError);
+    expect(() => parseAnalysisResponse({ ...analysisFixture, schemaVersion: 99 })).toThrow(
+      ApiUnsupportedVersionError,
+    );
   });
 
   it("parseHistoryResponse requires daily and points arrays", () => {

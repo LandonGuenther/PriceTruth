@@ -19,7 +19,11 @@ function collectCopyStrings(): string[] {
           out.push((value as (a: never, b: never) => string)(1 as never, 2 as never));
         } catch {
           out.push(
-            (value as (a: never, b: never, c: never) => string)(1 as never, "a" as never, "b" as never),
+            (value as (a: never, b: never, c: never) => string)(
+              1 as never,
+              "a" as never,
+              "b" as never,
+            ),
           );
         }
       }

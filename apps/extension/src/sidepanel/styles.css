@@ -41,13 +41,7 @@
 
 body {
   margin: 0;
-  font-family:
-    "IBM Plex Sans",
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif;
+  font-family: "IBM Plex Sans", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--fg);
   background: var(--bg);
   font-size: 14px;

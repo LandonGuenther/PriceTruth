@@ -20,7 +20,8 @@ export const BESTBUY_SELECTORS = {
   /** Inside the main price block: whole regular-price row (first $ amount). */
   priceBlockRegular: '[data-testid="price-block-regular-price"]',
   /** Marketplace / fulfilled-by badge near the offer. */
-  marketplaceBadge: '[data-testid="marketplace-badge"], .marketplace-badge, [data-testid="sold-by"]',
+  marketplaceBadge:
+    '[data-testid="marketplace-badge"], .marketplace-badge, [data-testid="sold-by"]',
   /** "Was $X" / "Reg $X" / "Comp. Value: $X" regular price next to the sale price. */
   reference: [
     '[data-testid="price-block-regular-price"] [data-lu-target="comp_value"]',

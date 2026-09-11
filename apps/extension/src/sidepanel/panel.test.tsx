@@ -126,7 +126,9 @@ describe("Panel", () => {
 
   it("idle state prompts to open a supported product page", () => {
     render(<Panel state={{ status: "idle" }} />);
-    expect(screen.getAllByText(/Open a supported product page on Amazon or Best Buy\./).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Open a supported product page on Amazon or Best Buy\./).length,
+    ).toBeGreaterThan(0);
   });
 
   it("unsupported state explains, with extra note for no_price", () => {
@@ -262,5 +264,4 @@ describe("Panel", () => {
     render(<Panel state={ready} />);
     expect(screen.getByText(/Is this price correct/i)).toBeTruthy();
   });
-
 });

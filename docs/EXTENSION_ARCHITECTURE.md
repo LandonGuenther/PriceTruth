@@ -27,17 +27,17 @@ Scope: `apps/extension` and its boundary with `@pricetruth/retailer-adapters` /
 └─────────────────────────────┘
 ```
 
-| Piece | Entry | Role |
-| --- | --- | --- |
-| Content script | `src/content/index.ts` | Start observer; answer `pt/ping`. |
-| Observer | `src/content/observer.ts` | URL poll + debounced DOM extract; send observations / failures. |
-| Mutation filter | `src/content/mutationRelevance.ts` | Ignore unrelated chrome; prefer price/title/identity nodes. |
-| Service worker | `src/background/service-worker.ts` | Wire Chrome APIs to handler + ApiClient. |
-| Handler | `src/background/handler.ts` | TabState transitions, generation tokens, navigation pings. |
-| API client | `src/background/api.ts` | POST observation, GET analysis/history; timeouts; parse/validate. |
-| Messages | `src/messages.ts` | Shared message and TabState types. |
-| Side panel | `src/sidepanel/*` | Render TabState; diagnostics; chart; feedback. |
-| Manifest | `src/manifest.ts` + `scripts/write-manifest.ts` | MV3 manifest with API origin substituted at build. |
+| Piece           | Entry                                           | Role                                                              |
+| --------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
+| Content script  | `src/content/index.ts`                          | Start observer; answer `pt/ping`.                                 |
+| Observer        | `src/content/observer.ts`                       | URL poll + debounced DOM extract; send observations / failures.   |
+| Mutation filter | `src/content/mutationRelevance.ts`              | Ignore unrelated chrome; prefer price/title/identity nodes.       |
+| Service worker  | `src/background/service-worker.ts`              | Wire Chrome APIs to handler + ApiClient.                          |
+| Handler         | `src/background/handler.ts`                     | TabState transitions, generation tokens, navigation pings.        |
+| API client      | `src/background/api.ts`                         | POST observation, GET analysis/history; timeouts; parse/validate. |
+| Messages        | `src/messages.ts`                               | Shared message and TabState types.                                |
+| Side panel      | `src/sidepanel/*`                               | Render TabState; diagnostics; chart; feedback.                    |
+| Manifest        | `src/manifest.ts` + `scripts/write-manifest.ts` | MV3 manifest with API origin substituted at build.                |
 
 ## Content script observer
 
@@ -92,35 +92,35 @@ Defined in `apps/extension/src/messages.ts`.
 
 **Content → background**
 
-| Type | Payload highlights |
-| --- | --- |
-| `pt/observation` | `observation: RetailerObservation`, optional `extraction: ExtractionMeta` |
-| `pt/extraction-failed` | `retailer`, `reason`, `url`, `warnings`, optional `extraction` |
+| Type                   | Payload highlights                                                        |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `pt/observation`       | `observation: RetailerObservation`, optional `extraction: ExtractionMeta` |
+| `pt/extraction-failed` | `retailer`, `reason`, `url`, `warnings`, optional `extraction`            |
 
 Failure reasons: `not_product_page` | `no_identifier` | `no_price` | `invalid` |
 `ambiguous_price`.
 
 **Panel → background**
 
-| Type | Purpose |
-| --- | --- |
-| `pt/retry` | `{ tabId }` re-run last observation |
+| Type                 | Purpose                                          |
+| -------------------- | ------------------------------------------------ |
+| `pt/retry`           | `{ tabId }` re-run last observation              |
 | `pt/set-diagnostics` | `{ enabled }` reserved; panel uses storage today |
 
 **Background ↔ content**
 
-| Type | Purpose |
-| --- | --- |
-| `pt/ping` | Liveness probe |
+| Type      | Purpose                               |
+| --------- | ------------------------------------- |
+| `pt/ping` | Liveness probe                        |
 | `pt/pong` | Synchronous reply from content script |
 
 ## Storage keys
 
-| Key | Area | Lifetime / notes |
-| --- | --- | --- |
-| `tab:<tabId>` | `chrome.storage.session` | Per-tab `TabState`. Cleared on `tabs.onRemoved`. |
-| `pt:diagnostics` | `chrome.storage.session` | Global diagnostics toggle. |
-| `pt:local-feedback` | Side-panel `sessionStorage` | Last ~20 local feedback payloads; not uploaded. |
+| Key                 | Area                        | Lifetime / notes                                 |
+| ------------------- | --------------------------- | ------------------------------------------------ |
+| `tab:<tabId>`       | `chrome.storage.session`    | Per-tab `TabState`. Cleared on `tabs.onRemoved`. |
+| `pt:diagnostics`    | `chrome.storage.session`    | Global diagnostics toggle.                       |
+| `pt:local-feedback` | Side-panel `sessionStorage` | Last ~20 local feedback payloads; not uploaded.  |
 
 Nothing is written to `chrome.storage.local` or disk by the extension runtime.
 
@@ -138,11 +138,11 @@ Nothing is written to `chrome.storage.local` or disk by the extension runtime.
 
 `ApiClient` (`src/background/api.ts`):
 
-| Call | Path |
-| --- | --- |
-| `postObservation` | `POST /v1/observations` |
-| `getAnalysis` | `GET /v1/listings/:retailer/:id/analysis` |
-| `getHistory` | `GET /v1/listings/:retailer/:id/history?days=180` (default) |
+| Call              | Path                                                        |
+| ----------------- | ----------------------------------------------------------- |
+| `postObservation` | `POST /v1/observations`                                     |
+| `getAnalysis`     | `GET /v1/listings/:retailer/:id/analysis`                   |
+| `getHistory`      | `GET /v1/listings/:retailer/:id/history?days=180` (default) |
 
 Behavior:
 

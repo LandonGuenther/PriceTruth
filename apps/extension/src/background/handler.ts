@@ -1,7 +1,14 @@
 import { PRODUCT_NAME, type RetailerObservation } from "@pricetruth/shared";
 import type { ExtractionMeta, RuntimeMessage, TabState } from "../messages.js";
 import { tabStateKey } from "../messages.js";
-import { ApiError, ApiMalformedError, ApiTimeoutError, ApiUnsupportedVersionError, type ApiClient, type IngestResponse } from "./api.js";
+import {
+  ApiError,
+  ApiMalformedError,
+  ApiTimeoutError,
+  ApiUnsupportedVersionError,
+  type ApiClient,
+  type IngestResponse,
+} from "./api.js";
 
 export interface HandlerStorage {
   get(key: string): Promise<Record<string, TabState>>;
@@ -66,9 +73,13 @@ async function getState(deps: HandlerDeps, tabId: number): Promise<TabState | un
   return all[tabStateKey(tabId)];
 }
 
-function classifyError(err: unknown): { kind: "network" | "api" | "timeout" | "unknown"; message: string } {
+function classifyError(err: unknown): {
+  kind: "network" | "api" | "timeout" | "unknown";
+  message: string;
+} {
   if (err instanceof ApiTimeoutError) return { kind: "timeout", message: timeoutMessage };
-  if (err instanceof ApiUnsupportedVersionError) return { kind: "api", message: unsupportedMessage };
+  if (err instanceof ApiUnsupportedVersionError)
+    return { kind: "api", message: unsupportedMessage };
   if (err instanceof ApiMalformedError) return { kind: "api", message: malformedMessage };
   if (err instanceof ApiError) return { kind: "api", message: apiMessage };
   if (err instanceof TypeError) return { kind: "network", message: unreachableMessage };

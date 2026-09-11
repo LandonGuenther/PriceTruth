@@ -139,10 +139,7 @@ export function HistoryChart({
   typicalCents?: number | null;
 }): React.JSX.Element | null {
   const [windowDays, setWindowDays] = useState<ChartWindow>(90);
-  const points = useMemo(
-    () => filterDaily(history.daily, windowDays),
-    [history.daily, windowDays],
-  );
+  const points = useMemo(() => filterDaily(history.daily, windowDays), [history.daily, windowDays]);
   const labelId = useId();
 
   if (history.daily.length === 0) return null;

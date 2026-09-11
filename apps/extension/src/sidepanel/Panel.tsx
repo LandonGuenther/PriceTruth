@@ -53,10 +53,7 @@ export function Panel({
     void chromeApi.storage.session.get(DIAGNOSTICS_KEY).then((stored) => {
       if (!cancelled) setDiagnostics(stored[DIAGNOSTICS_KEY] === true);
     });
-    const onChanged = (
-      changes: Record<string, { newValue?: unknown }>,
-      area: string,
-    ) => {
+    const onChanged = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       if (area !== "session" || !changes[DIAGNOSTICS_KEY]) return;
       setDiagnostics(changes[DIAGNOSTICS_KEY].newValue === true);
     };

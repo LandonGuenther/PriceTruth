@@ -114,7 +114,12 @@ function parseCents(raw: string): number | null {
   return parsePriceToCents(raw.replace(/\u00a0/g, " ").trim());
 }
 
-function collectOffscreen(root: Element, selector: string, method: string, priority: number): PriceCandidate[] {
+function collectOffscreen(
+  root: Element,
+  selector: string,
+  method: string,
+  priority: number,
+): PriceCandidate[] {
   const out: PriceCandidate[] = [];
   for (const el of root.querySelectorAll(selector)) {
     if (isContaminated(el) || looksLikeNonBuyBoxPrice(el)) continue;
@@ -155,9 +160,7 @@ function collectLegacyPrices(doc: Document): PriceCandidate[] {
 }
 
 interface JsonLdProduct {
-  offers?:
-    | { price?: string | number }
-    | Array<{ price?: string | number }>;
+  offers?: { price?: string | number } | Array<{ price?: string | number }>;
 }
 
 function findJsonLdProduct(doc: Document): JsonLdProduct | null {
@@ -208,9 +211,7 @@ function extractPrice(doc: Document, warnings: string[]): PriceOutcome {
     candidates.push(
       ...collectOffscreen(root, S.priceToPayOffscreen, `core:priceToPay:${rootSel}`, 10),
     );
-    candidates.push(
-      ...collectOffscreen(root, S.priceOffscreen, `core:a-price:${rootSel}`, 20),
-    );
+    candidates.push(...collectOffscreen(root, S.priceOffscreen, `core:a-price:${rootSel}`, 20));
     candidates.push(...collectSplitPrice(root, 30));
   }
 

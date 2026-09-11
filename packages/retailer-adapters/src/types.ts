@@ -20,11 +20,7 @@ export interface ExtractionMeta {
 }
 
 export type ExtractionFailureReason =
-  | "not_product_page"
-  | "no_identifier"
-  | "no_price"
-  | "invalid"
-  | "ambiguous_price";
+  "not_product_page" | "no_identifier" | "no_price" | "invalid" | "ambiguous_price";
 
 export type ExtractionResult =
   | {

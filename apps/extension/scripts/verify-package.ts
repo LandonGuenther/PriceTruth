@@ -43,7 +43,10 @@ if (!existsSync(zipPath)) fail(`zip not found at ${zipPath}`);
 let entries: string[] = [];
 try {
   const out = execFileSync("unzip", ["-Z1", zipPath], { encoding: "utf8" });
-  entries = out.split("\n").map((s) => s.trim()).filter(Boolean);
+  entries = out
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
 } catch {
   fail("unzip -Z1 failed; install unzip to verify package contents");
 }

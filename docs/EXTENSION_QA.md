@@ -29,23 +29,23 @@ pnpm --filter @pricetruth/extension verify-package
 
 ### `@pricetruth/extension`
 
-| File | Focus |
-| --- | --- |
-| `src/background/handler.test.ts` | Success → ready; API/timeout errors; unsupported; `ambiguous_price`; duplicate ingest; retry; **stale generation cannot overwrite newer ready**; navigation ping idle/preserve/loading; overlapping nav cancel |
-| `src/background/api.test.ts` | Unbound-safe fetch; ApiError; malformed JSON; unsupported API version; client version header; **no retry on failure**; response parsers |
-| `src/content/observer.test.ts` | Bootstrap send; identical churn; mutation burst once; URL/ASIN change; price change; not_product_page once; failure once per URL; identity change clears failure cache; ambiguous never posts observation |
-| `src/content/mutation.test.ts` | Relevant price/title/sku markers; ignore nav/footer; text-node parent walk |
-| `src/sidepanel/panel.test.tsx` | Ready labels/scores; **INSUFFICIENT hides scores**; idle/unsupported/ambiguous/error/loading phases; HTML-like titles as text; unknown reasons; diagnostics + feedback controls |
-| `src/sidepanel/useTabState.test.tsx` | Initial tab state; session `onChanged` re-render |
-| `src/sidepanel/copy.test.ts` | Forbidden-word guard; reason humanization |
+| File                                 | Focus                                                                                                                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/background/handler.test.ts`     | Success → ready; API/timeout errors; unsupported; `ambiguous_price`; duplicate ingest; retry; **stale generation cannot overwrite newer ready**; navigation ping idle/preserve/loading; overlapping nav cancel |
+| `src/background/api.test.ts`         | Unbound-safe fetch; ApiError; malformed JSON; unsupported API version; client version header; **no retry on failure**; response parsers                                                                        |
+| `src/content/observer.test.ts`       | Bootstrap send; identical churn; mutation burst once; URL/ASIN change; price change; not_product_page once; failure once per URL; identity change clears failure cache; ambiguous never posts observation      |
+| `src/content/mutation.test.ts`       | Relevant price/title/sku markers; ignore nav/footer; text-node parent walk                                                                                                                                     |
+| `src/sidepanel/panel.test.tsx`       | Ready labels/scores; **INSUFFICIENT hides scores**; idle/unsupported/ambiguous/error/loading phases; HTML-like titles as text; unknown reasons; diagnostics + feedback controls                                |
+| `src/sidepanel/useTabState.test.tsx` | Initial tab state; session `onChanged` re-render                                                                                                                                                               |
+| `src/sidepanel/copy.test.ts`         | Forbidden-word guard; reason humanization                                                                                                                                                                      |
 
 ### `@pricetruth/retailer-adapters` (extension-critical)
 
-| File | Focus |
-| --- | --- |
-| `amazon/amazon.test.ts` | URL match; extract happy paths; conflicting buy-box → `ambiguous_price`; scoped selectors; fixtures |
-| `bestbuy/bestbuy.test.ts` | Legacy + `/product/` URLs; SKU authority; conflict → `ambiguous_price`; price-block scoping |
-| `extraction-meta.test.ts` | Confidence fields HIGH/MEDIUM/LOW/AMBIGUOUS across adapters |
+| File                      | Focus                                                                                               |
+| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `amazon/amazon.test.ts`   | URL match; extract happy paths; conflicting buy-box → `ambiguous_price`; scoped selectors; fixtures |
+| `bestbuy/bestbuy.test.ts` | Legacy + `/product/` URLs; SKU authority; conflict → `ambiguous_price`; price-block scoping         |
+| `extraction-meta.test.ts` | Confidence fields HIGH/MEDIUM/LOW/AMBIGUOUS across adapters                                         |
 
 Fixture HTML lives under `packages/retailer-adapters` (not shipped in the zip;
 `verify-package` forbids fixture paths).

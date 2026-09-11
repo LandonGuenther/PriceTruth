@@ -61,14 +61,14 @@ Production builds must set it to the deployed API origin.
 
 Formal statuses in `apps/extension/src/messages.ts`:
 
-| Status | Meaning |
-| --- | --- |
-| `idle` | No supported product context for this tab (or left a supported host). |
+| Status        | Meaning                                                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `idle`        | No supported product context for this tab (or left a supported host).                                                  |
 | `unsupported` | On a supported host, but not a usable product extract (`not_product_page`, `no_price`, `no_identifier`, `invalid`, …). |
-| `ambiguous` | Product found, but price confidence is `AMBIGUOUS` / reason `ambiguous_price`. Nothing is ingested. |
-| `loading` | Ingest in flight. `phase`: `submitting` then `analyzing`. Carries `generation`. |
-| `ready` | Analysis + history loaded. May still be `confidence.level === "INSUFFICIENT"`. |
-| `error` | API/network/timeout/unknown failure. `kind` classifies the error; Retry re-runs the last observation. |
+| `ambiguous`   | Product found, but price confidence is `AMBIGUOUS` / reason `ambiguous_price`. Nothing is ingested.                    |
+| `loading`     | Ingest in flight. `phase`: `submitting` then `analyzing`. Carries `generation`.                                        |
+| `ready`       | Analysis + history loaded. May still be `confidence.level === "INSUFFICIENT"`.                                         |
+| `error`       | API/network/timeout/unknown failure. `kind` classifies the error; Retry re-runs the last observation.                  |
 
 Identity changes must move through `loading` (or `unsupported` / `ambiguous`) and
 must not leave a previous product's `ready` analysis on screen.
@@ -131,10 +131,10 @@ details disclosure.
 These are two independent scores from the API (see `docs/SCORING.md`). The panel
 never merges them.
 
-| Surface | Question |
-| --- | --- |
+| Surface                | Question                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------- |
 | **Discount Integrity** | Does the store's advertised / reference discount hold up against observed history? |
-| **Deal Score** | Regardless of the advertisement, is today's price historically good? |
+| **Deal Score**         | Regardless of the advertisement, is today's price historically good?               |
 
 Price summary still shows "STORE SAYS" (advertised discount vs reference) and
 "HISTORY SAYS" (vs typical) even when confidence is insufficient for numeric
@@ -143,12 +143,12 @@ gates.
 
 ## Privacy and permissions
 
-| Permission / capability | Why |
-| --- | --- |
-| `sidePanel` | Show the analysis panel when the toolbar action is clicked. |
-| `storage` | `chrome.storage.session` holds per-tab `TabState` (in-memory only). |
-| `host_permissions: <API origin>/*` | Service worker calls the PriceTruth API. |
-| `content_scripts.matches` | Read-only DOM extraction on Amazon / Best Buy product pages. |
+| Permission / capability            | Why                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| `sidePanel`                        | Show the analysis panel when the toolbar action is clicked.         |
+| `storage`                          | `chrome.storage.session` holds per-tab `TabState` (in-memory only). |
+| `host_permissions: <API origin>/*` | Service worker calls the PriceTruth API.                            |
+| `content_scripts.matches`          | Read-only DOM extraction on Amazon / Best Buy product pages.        |
 
 Deliberately absent: `tabs`, `history`, `<all_urls>`, `cookies`, `webRequest`,
 `scripting`.
