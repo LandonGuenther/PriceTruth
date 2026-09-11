@@ -35,8 +35,9 @@ export async function runJob(
   const workerId = opts.workerId ?? defaultWorkerId();
 
   if (!(await acquireLease(prisma, jobName, workerId, ttlMs))) {
+    const now = new Date();
     await prisma.jobRun.create({
-      data: { jobName, status: "SKIPPED_LOCKED", finishedAt: new Date(), workerId },
+      data: { jobName, status: "SKIPPED_LOCKED", startedAt: now, finishedAt: now, workerId },
     });
     metrics.inc("job_runs_total", { job: jobName, status: "skipped_locked" });
     return { skipped: true };
