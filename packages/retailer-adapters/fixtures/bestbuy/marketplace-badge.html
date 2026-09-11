@@ -1,0 +1,52 @@
+<!--
+  Marketplace / sold-by badge present beside the primary offer. Price still
+  comes from the uncontaminated price block; badge emits a warning.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Marketplace Battery Pack - Best Buy</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Acme Marketplace Battery Pack",
+        "sku": "6599001",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "offers": {
+          "@type": "Offer",
+          "price": 34.99,
+          "availability": "https://schema.org/InStock",
+          "seller": { "@type": "Organization", "name": "Third Party Seller" }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme Marketplace Battery Pack</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6599001</div>
+    <div data-testid="sold-by" class="marketplace-badge">
+      Sold by Third Party Seller
+    </div>
+    <div data-testid="marketplace-badge">Marketplace</div>
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$34.99</span>
+        </div>
+        <div data-testid="price-block-regular-price">
+          <span data-lu-target="comp_value">$44.99</span>
+        </div>
+      </div>
+    </div>
+    <!-- Marketplace-adjacent tile that must not leak -->
+    <div data-testid="marketplace-offers-rail">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$29.99</span>
+        </div>
+      </div>
+    </div>
+    <button data-testid="pdp-add-to-cart-6599001" type="button">Add to cart</button>
+  </body>
+</html>

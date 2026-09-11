@@ -1,6 +1,6 @@
 <!--
-  Trimmed hand-built fixture modeled on Amazon's markup where the price is
-  rendered as separate whole/fraction spans with no .a-offscreen copy.
+  Trimmed hand-built fixture: split whole/fraction price inside a core buy-box
+  container. Global .a-price outside roots must be ignored by the adapter.
   NOT a captured page.
 -->
 <!doctype html>
@@ -8,10 +8,19 @@
   <body>
     <div id="dp" data-asin="B0SPLITPRX">
       <span id="productTitle">Acme Split Price Lamp</span>
-      <span class="a-price">
-        <span class="a-price-whole">199<span class="a-price-decimal">.</span></span>
-        <span class="a-price-fraction">95</span>
-      </span>
+      <!-- Contaminating global split price that must NEVER win -->
+      <div id="anonCarousel1" class="a-carousel">
+        <span class="a-price">
+          <span class="a-price-whole">9<span class="a-price-decimal">.</span></span>
+          <span class="a-price-fraction">99</span>
+        </span>
+      </div>
+      <div id="corePrice_feature_div">
+        <span class="a-price">
+          <span class="a-price-whole">199<span class="a-price-decimal">.</span></span>
+          <span class="a-price-fraction">95</span>
+        </span>
+      </div>
       <div id="availability">In Stock</div>
     </div>
   </body>

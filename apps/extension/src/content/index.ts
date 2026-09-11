@@ -1,5 +1,5 @@
 /**
- * PriceTruth content script — privacy scope:
+ * PriceTruth content script - privacy scope:
  * reads ONLY product metadata via the retailer-adapter selectors (title,
  * prices, identifiers, availability). It never writes to the DOM, never reads
  * cookies or form fields, and sends only RetailerObservation objects (or an
@@ -8,6 +8,8 @@
  */
 import { startObserver } from "./observer.js";
 import type { BackgroundToContent, ContentPong, ContentToBackground } from "../messages.js";
+
+import { mutationLooksRelevant } from "./mutationRelevance.js";
 
 // Service-worker liveness check: answer pt/ping synchronously with pt/pong.
 chrome.runtime.onMessage.addListener(
@@ -27,8 +29,23 @@ startObserver({
   clearInterval: (h) => window.clearInterval(h as number),
   setTimeout: (fn, ms) => window.setTimeout(fn, ms),
   observeDomMutations: (cb) => {
-    const mo = new MutationObserver(cb);
-    mo.observe(document.body, { subtree: true, childList: true, characterData: true });
+    const mo = new MutationObserver((mutations) => {
+      const relevant = mutations.some((m) => {
+        if (mutationLooksRelevant(m.target)) return true;
+        for (const n of m.addedNodes) {
+          if (mutationLooksRelevant(n)) return true;
+        }
+        return false;
+      });
+      if (relevant) cb();
+    });
+    mo.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["class", "data-asin", "data-sku-id", "data-testid", "style"],
+    });
     return () => mo.disconnect();
   },
 });

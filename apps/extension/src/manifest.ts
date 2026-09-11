@@ -5,8 +5,8 @@ import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@pricetruth/shared";
  * dist/manifest.json, substituting the version and API origin.
  *
  * Permissions are intentionally minimal (see docs/EXTENSION.md):
- * - "sidePanel" — open the analysis panel.
- * - "storage" — chrome.storage.session holds per-tab state (never persisted).
+ * - "sidePanel"  -  open the analysis panel.
+ * - "storage"  -  chrome.storage.session holds per-tab state (never persisted).
  * Retailer page access comes only from content_scripts.matches; the sole
  * host_permission is the PriceTruth API itself.
  */

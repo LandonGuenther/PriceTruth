@@ -1,0 +1,37 @@
+<!--
+  Sanitized fixture: Prime / member price styling around the buy box. The
+  customer price to pay must still come from priceToPay, not from Prime badges
+  or secondary member callouts.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0PRIMEMEM">
+      <input type="hidden" id="ASIN" value="B0PRIMEMEM" />
+      <span id="productTitle">Acme Prime Member Speaker</span>
+      <a id="bylineInfo">Visit the Acme Store</a>
+
+      <div id="corePriceDisplay_desktop_feature_div">
+        <span class="basisPrice"
+          ><span class="a-size-small">List Price:</span>
+          <span class="a-offscreen">$129.00</span></span
+        >
+        <span class="priceToPay aok-align-center reinventPricePriceToPayMargin">
+          <span class="a-offscreen">$89.99</span>
+        </span>
+        <div class="prime-price a-color-success">
+          <span class="a-size-small">Prime Exclusive Price badge</span>
+        </div>
+      </div>
+
+      <div id="apex_desktop">
+        <span class="priceToPay"><span class="a-offscreen">$89.99</span></span>
+        <div id="primeMemberDealBadge" class="prime-price">
+          <span>Members pay $89.99</span>
+        </div>
+      </div>
+
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>

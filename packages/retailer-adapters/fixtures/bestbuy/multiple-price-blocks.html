@@ -1,0 +1,28 @@
+<!--
+  Two uncontaminated primary price blocks with conflicting customer prices.
+  Adapter must return ambiguous_price.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Multi Price Block TV - Best Buy</title>
+  </head>
+  <body>
+    <h1>Acme Multi Price Block TV</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6522333</div>
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$499.99</span>
+        </div>
+      </div>
+    </div>
+    <div data-testid="fulfillment-section">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$479.99</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

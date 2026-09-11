@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { TabState } from "../messages.js";
 import { tabStateKey } from "../messages.js";
 
-/** Minimal chrome surface the panel needs — injectable for tests. */
+/** Minimal chrome surface the panel needs  -  injectable for tests. */
 export interface ChromeLike {
   tabs: {
     query(info: { active: boolean; lastFocusedWindow: boolean }): Promise<{ id?: number }[]>;
@@ -12,7 +12,7 @@ export interface ChromeLike {
     session: {
       get(key: string): Promise<Record<string, TabState>>;
       onChanged: {
-        // StorageArea.onChanged fires with only (changes) — no area argument.
+        // StorageArea.onChanged fires with only (changes)  -  no area argument.
         addListener(cb: (changes: Record<string, { newValue?: TabState }>) => void): void;
         removeListener(cb: (changes: Record<string, { newValue?: TabState }>) => void): void;
       };

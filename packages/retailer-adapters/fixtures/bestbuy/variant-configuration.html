@@ -1,0 +1,45 @@
+<!--
+  Sanitized fixture: configuration / variation selector present next to the
+  main price block. Selector tiles must not leak alternate prices.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div class="pdp" data-sku-id="6555001">
+      <h1>Acme Configurable Monitor</h1>
+      <div class="pr-200 inline-block">SKU: 6555001</div>
+
+      <div
+        data-testid="configuration-selector"
+        class="configuration-options"
+        id="product-configurations"
+      >
+        <button type="button" data-sku-id="6555002" class="configuration-tile">
+          27 inch
+          <span class="configuration-price">$249.99</span>
+        </button>
+        <button type="button" data-sku-id="6555001" class="configuration-tile selected">
+          32 inch
+          <span class="configuration-price">$329.99</span>
+        </button>
+        <button type="button" data-sku-id="6555003" class="configuration-tile">
+          34 inch
+          <span class="configuration-price">$449.99</span>
+        </button>
+      </div>
+
+      <div data-testid="LARGE_profile">
+        <div data-testid="price-block">
+          <div data-testid="price-block-customer-price">
+            <span class="sr-only">$329.99</span>
+          </div>
+          <div data-testid="price-block-regular-price">
+            <span data-lu-target="comp_value">$399.99</span>
+          </div>
+        </div>
+      </div>
+
+      <button data-testid="pdp-add-to-cart-6555001" type="button">Add to cart</button>
+    </div>
+  </body>
+</html>

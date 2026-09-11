@@ -1,6 +1,6 @@
-import { findAdapter } from "@pricetruth/retailer-adapters";
+import { findAdapter, type ExtractionMeta } from "@pricetruth/retailer-adapters";
 import { retailerForHostname } from "@pricetruth/shared";
-import type { ContentToBackground } from "../messages.js";
+import type { ContentToBackground, ExtractionMeta as MessageExtractionMeta } from "../messages.js";
 
 export interface ObserverDeps {
   getUrl: () => URL;
@@ -10,7 +10,7 @@ export interface ObserverDeps {
   setInterval: (fn: () => void, ms: number) => unknown;
   clearInterval: (handle: unknown) => void;
   setTimeout: (fn: () => void, ms: number) => unknown;
-  /** Subscribe to DOM mutations; must call the callback (already) debounced or not — we debounce. */
+  /** Subscribe to DOM mutations; must call the callback (already) debounced or not - we debounce. */
   observeDomMutations: (cb: () => void) => () => void;
 }
 
@@ -18,11 +18,29 @@ const URL_POLL_MS = 1000;
 const MUTATION_DEBOUNCE_MS = 1500;
 const LOCAL_DEDUPE_MS = 10 * 60 * 1000;
 
+/** Map adapter ExtractionMeta onto the content→background message shape. */
+export function toMessageExtraction(meta?: ExtractionMeta): MessageExtractionMeta | undefined {
+  if (!meta) return undefined;
+  return {
+    adapterVersion: meta.adapterVersion,
+    identityMethod: meta.identityMethod,
+    priceMethod: meta.priceMethod,
+    referenceMethod: meta.referenceMethod,
+    identityConfidence: meta.identityConfidence,
+    priceConfidence: meta.priceConfidence,
+    referenceConfidence: meta.referenceConfidence,
+    warnings: meta.warnings,
+  };
+}
+
 /**
  * Extraction loop for the content script. Re-extracts when the URL changes
  * (retailer sites use pushState for variant switches) or when the DOM mutates
  * (debounced), but only re-sends when the extracted result actually differs,
  * and never more than one send per identical result within 10 minutes.
+ *
+ * Ambiguous prices are reported as pt/extraction-failed and never submitted as
+ * observations.
  */
 export function startObserver(deps: ObserverDeps): { stop: () => void } {
   let lastUrl = deps.getUrl().href;
@@ -30,6 +48,12 @@ export function startObserver(deps: ObserverDeps): { stop: () => void } {
   let lastSent: { signature: string; at: number } | null = null;
   const failedUrls = new Set<string>();
   let debounceTimer: unknown = null;
+
+  const onIdentityChange = (previousHref: string, nextHref: string): void => {
+    failedUrls.delete(previousHref);
+    failedUrls.delete(nextHref);
+    lastSignature = null;
+  };
 
   const runOnce = (): void => {
     const url = deps.getUrl();
@@ -56,6 +80,7 @@ export function startObserver(deps: ObserverDeps): { stop: () => void } {
     }
 
     const result = adapter.extract(doc, url, now);
+    const extraction = toMessageExtraction(result.meta);
     if (!result.ok) {
       if (!failedUrls.has(url.href)) {
         failedUrls.add(url.href);
@@ -65,6 +90,7 @@ export function startObserver(deps: ObserverDeps): { stop: () => void } {
           reason: result.reason,
           url: url.href,
           warnings: result.warnings,
+          extraction,
         });
       }
       return;
@@ -83,14 +109,14 @@ export function startObserver(deps: ObserverDeps): { stop: () => void } {
     }
     lastSignature = signature;
     lastSent = { signature, at: now.getTime() };
-    deps.send({ type: "pt/observation", observation: o });
+    deps.send({ type: "pt/observation", observation: o, extraction });
   };
 
   const interval = deps.setInterval(() => {
     const href = deps.getUrl().href;
     if (href !== lastUrl) {
+      onIdentityChange(lastUrl, href);
       lastUrl = href;
-      lastSignature = null; // new page → re-evaluate
       runOnce();
     }
   }, URL_POLL_MS);

@@ -1,6 +1,6 @@
 /**
  * Generates the deterministic placeholder icons under public/icons:
- * solid-color rounded-square-free PNGs (no text) — pure Node, no deps.
+ * solid-color rounded-square-free PNGs (no text)  -  pure Node, no deps.
  */
 import { deflateSync } from "node:zlib";
 import { writeFileSync, mkdirSync } from "node:fs";

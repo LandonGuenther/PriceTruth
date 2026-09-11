@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { OBSERVATION_SOURCES } from "@pricetruth/shared";
-import { amazonAdapter } from "./index.js";
+import { amazonAdapter, AMAZON_ADAPTER_VERSION } from "./index.js";
 import { AMAZON_SELECTORS } from "./selectors.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +61,9 @@ describe("extract", () => {
       observedAt: NOW.toISOString(),
     });
     expect(r.observation.variant).toEqual({ Size: "Large" });
+    expect(r.meta.adapterVersion).toBe(AMAZON_ADAPTER_VERSION);
+    expect(r.meta.identityMethod).toBe("url_asin");
+    expect(r.meta.priceConfidence).toBe("HIGH");
   });
 
   it("no reference price → referencePriceCents undefined", () => {
@@ -100,12 +103,81 @@ describe("extract", () => {
     expect(r.reason).toBe("no_price");
   });
 
-  it("split whole/fraction price", () => {
+  it("split whole/fraction price scoped to core container", () => {
     const doc = loadFixture("split-price.html");
     const r = amazonAdapter.extract(doc, productUrl("B0SPLITPRX"), NOW);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.observation.priceCents).toBe(19995);
+    expect(r.meta.priceMethod).toBe("split_whole_fraction");
+  });
+
+  it("coupon badge amount is ignored", () => {
+    const doc = loadFixture("coupon-present.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0COUPONXX"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(4999);
+  });
+
+  it("conflicting buy-box prices → ambiguous_price", () => {
+    const doc = loadFixture("multiple-visible-prices.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0MULTIVIS"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("ambiguous_price");
+    expect(r.meta?.priceConfidence).toBe("AMBIGUOUS");
+  });
+
+  it("used offer price is rejected in favor of new buy box", () => {
+    const doc = loadFixture("used-offer.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0USEDOFRX"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(12999);
+  });
+
+  it("subscribe-and-save secondary price is ignored", () => {
+    const doc = loadFixture("subscribe-and-save.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0SNSSECON"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(1899);
+  });
+
+  it("installment / APR text is not treated as cash price", () => {
+    const doc = loadFixture("installment-text.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0INSTALLX"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(59900);
+  });
+
+  it("cross-sell carousel prices never win", () => {
+    const doc = loadFixture("cross-sell-carousel.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0CAROUSEL"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(34900);
+    expect(r.observation.referencePriceCents).toBe(44900);
+  });
+
+  it("sponsored product rail prices never win", () => {
+    const doc = loadFixture("sponsored-products.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0SPONSORD"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(8900);
+    expect(r.observation.referencePriceCents).toBe(11900);
+  });
+
+  it("twister variant selection is captured", () => {
+    const doc = loadFixture("twister-variant.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0TWISTERX"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(2750);
+    expect(r.observation.variant).toEqual({ Color: "Navy", Size: "Medium" });
   });
 
   it("extractExternalId falls back to DOM when URL has no id", () => {
@@ -113,6 +185,64 @@ describe("extract", () => {
     expect(amazonAdapter.extractExternalId(new URL("https://www.amazon.com/x"), doc)).toBe(
       "B0DEMOASIN",
     );
+  });
+
+  it("identity precedence: URL beats conflicting input#ASIN", () => {
+    const doc = loadFixture("sale-with-list-price.html");
+    const input = doc.querySelector<HTMLInputElement>("input#ASIN");
+    if (input) input.value = "B0OTHERASI";
+    expect(amazonAdapter.extractExternalId(productUrl("B0DEMOASIN"), doc)).toBe("B0DEMOASIN");
+  });
+
+  it("Prime / member styling still yields buy-box priceToPay", () => {
+    const doc = loadFixture("prime-member-display.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0PRIMEMEM"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(8999);
+    expect(r.observation.referencePriceCents).toBe(12900);
+    expect(r.meta.priceMethod).toMatch(/priceToPay/);
+    expect(r.meta.priceConfidence).toBe("HIGH");
+  });
+
+  it("see-all-buying-options wall → no_price (not other-seller prices)", () => {
+    const doc = loadFixture("all-buying-options.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0ALLBUYOP"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.meta?.priceConfidence).toBe("LOW");
+  });
+
+  it("thin DOM falls back to JSON-LD Product Offer price", () => {
+    const doc = loadFixture("jsonld-fallback.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0JSONLDFB"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(2495);
+    expect(r.observation.title).toBe("Acme JSON-LD Fallback Mug");
+    expect(r.meta.priceMethod).toBe("jsonld_offers_price");
+    expect(r.meta.priceConfidence).toBe("MEDIUM");
+  });
+
+  it("minimal thin render extracts core a-price", () => {
+    const doc = loadFixture("minimal-thin-render.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0MINITHIN"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(1249);
+    expect(r.observation.title).toBe("Acme Thin Shell Notebook");
+    expect(r.observation.referencePriceCents).toBeUndefined();
+    expect(r.meta.priceMethod).toMatch(/a-price/);
+  });
+
+  it("coupon badge plus carousel never displace buy-box price", () => {
+    const doc = loadFixture("coupon-with-carousel.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0COUPCARO"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(5900);
+    expect(r.observation.referencePriceCents).toBe(7900);
   });
 });
 
@@ -122,7 +252,6 @@ describe("selector coverage", () => {
 
   it.each(allSelectors)("selector %s matches a node in some fixture", (sel) => {
     const matched = fixtures.some((doc) => {
-      // Compound selectors like "a, b" need per-part evaluation for coverage.
       return sel.split(",").some((part) => doc.querySelector(part.trim()) !== null);
     });
     expect(matched).toBe(true);

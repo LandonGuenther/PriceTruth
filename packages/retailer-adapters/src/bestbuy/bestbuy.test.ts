@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { OBSERVATION_SOURCES } from "@pricetruth/shared";
 import { findAdapter } from "../index.js";
-import { bestbuyAdapter } from "./index.js";
+import { bestbuyAdapter, BESTBUY_ADAPTER_VERSION } from "./index.js";
 import { BESTBUY_SELECTORS } from "./selectors.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -199,6 +199,120 @@ describe("extract", () => {
     const doc = loadFixture("dom-only-price.html");
     const plain = new URL("https://www.bestbuy.com/site/anything");
     expect(bestbuyAdapter.extractExternalId(plain, doc)).toBe("6401234");
+  });
+
+  it("Comp. Value is reference, not customer price", () => {
+    const doc = loadFixture("comp-value.html");
+    const r = bestbuyAdapter.extract(
+      doc,
+      new URL("https://www.bestbuy.com/product/acme-speaker/ABCDEF12"),
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(14999);
+    expect(r.observation.referencePriceCents).toBe(19999);
+    expect(r.meta.referenceMethod).toBe("comp_value");
+    expect(r.meta.adapterVersion).toBe(BESTBUY_ADAPTER_VERSION);
+  });
+
+  it("no-reference fixture leaves referencePriceCents undefined", () => {
+    const doc = loadFixture("no-reference.html");
+    const r = bestbuyAdapter.extract(
+      doc,
+      new URL("https://www.bestbuy.com/product/acme-mouse/ABCDEF34"),
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(2999);
+    expect(r.observation.referencePriceCents).toBeUndefined();
+  });
+
+  it("sku-mismatch fixture: page SKU beats URL SKU", () => {
+    const doc = loadFixture("sku-mismatch-url-vs-page.html");
+    const url = new URL("https://www.bestbuy.com/site/acme/6447382.p?skuId=6447382");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6588777");
+    expect(r.warnings).toContain("url sku differs from page sku");
+  });
+
+  it("conflicting uncontaminated price blocks → ambiguous_price", () => {
+    const doc = loadFixture("multiple-price-blocks.html");
+    const r = bestbuyAdapter.extract(
+      doc,
+      new URL("https://www.bestbuy.com/product/acme-tv/ABCDEF56"),
+      NOW,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("ambiguous_price");
+    expect(r.meta?.priceConfidence).toBe("AMBIGUOUS");
+  });
+
+  it("marketplace badge warns but does not adopt marketplace rail price", () => {
+    const doc = loadFixture("marketplace-badge.html");
+    const r = bestbuyAdapter.extract(
+      doc,
+      new URL("https://www.bestbuy.com/product/acme-battery/ABCDEF78"),
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(3499);
+    expect(r.observation.referencePriceCents).toBe(4499);
+    expect(r.warnings).toContain("marketplace badge present");
+  });
+
+  it("legacy /site/.../sku.p URL with matching page SKU", () => {
+    const doc = loadFixture("legacy-site-url.html");
+    const url = new URL("https://www.bestbuy.com/site/acme-headphones/6577123.p?skuId=6577123");
+    expect(bestbuyAdapter.matchesUrl(url)).toBe(true);
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6577123");
+    expect(r.observation.priceCents).toBe(12999);
+    expect(r.observation.referencePriceCents).toBe(15999);
+    expect(r.meta.identityMethod).toBe("data_sku_id");
+  });
+
+  it("identity from JSON-LD sku when DOM has no sku attributes", () => {
+    const doc = loadFixture("jsonld-sku.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-keyboard/ABCD1234XY");
+    expect(bestbuyAdapter.extractExternalId(url, doc)).toBe("6688444");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6688444");
+    expect(r.observation.priceCents).toBe(6999);
+    expect(r.meta.identityMethod).toBe("jsonld_sku");
+    expect(r.meta.identityConfidence).toBe("HIGH");
+  });
+
+  it("visible SKU: label fallback when JSON-LD is absent", () => {
+    const doc = loadFixture("visible-sku-label.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-mouse/EFGH5678ZZ");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6701122");
+    expect(r.observation.priceCents).toBe(3499);
+    expect(r.observation.referencePriceCents).toBe(4499);
+    expect(r.meta.identityMethod).toBe("sku_label");
+  });
+
+  it("configuration selector tiles do not leak alternate prices", () => {
+    const doc = loadFixture("variant-configuration.html");
+    const url = new URL("https://www.bestbuy.com/site/acme-monitor/6555001.p?skuId=6555001");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6555001");
+    expect(r.observation.priceCents).toBe(32999);
+    expect(r.observation.referencePriceCents).toBe(39999);
   });
 });
 

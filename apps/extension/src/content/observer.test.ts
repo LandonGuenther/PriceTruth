@@ -12,6 +12,17 @@ const PDP = (asin: string, price = "$299.00", ref = "$499.00") => `
     <div id="availability">In Stock</div>
   </div>`;
 
+const AMBIGUOUS_PDP = (asin: string) => `
+  <div id="dp" data-asin="${asin}">
+    <span id="productTitle">Widget ${asin}</span>
+    <div id="corePriceDisplay_desktop_feature_div">
+      <span class="priceToPay"><span class="a-offscreen">$199.00</span></span>
+    </div>
+    <div id="apex_desktop">
+      <span class="priceToPay"><span class="a-offscreen">$179.00</span></span>
+    </div>
+  </div>`;
+
 function makeDeps(initialUrl: string, initialHtml: string) {
   let url = new URL(initialUrl);
   let html = initialHtml;
@@ -57,6 +68,7 @@ describe("content observer", () => {
     expect(d.sent[0]).toMatchObject({
       type: "pt/observation",
       observation: { externalId: "B0TESTASIN", priceCents: 29900, referencePriceCents: 49900 },
+      extraction: { adapterVersion: "amazon@1", priceConfidence: "HIGH" },
     });
   });
 
@@ -67,6 +79,16 @@ describe("content observer", () => {
     d.mutate();
     d.flushTimers();
     d.tickInterval();
+    expect(d.sent).toHaveLength(1);
+  });
+
+  it("mutation burst only sends once", () => {
+    const d = makeDeps(URL1, PDP("B0TESTASIN"));
+    startObserver(d.deps);
+    d.mutate();
+    d.mutate();
+    d.mutate();
+    d.flushTimers();
     expect(d.sent).toHaveLength(1);
   });
 
@@ -113,5 +135,37 @@ describe("content observer", () => {
     const failures = d.sent.filter((m) => m.type === "pt/extraction-failed");
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatchObject({ reason: "no_price", retailer: "amazon" });
+  });
+
+  it("identity change clears failure cache so new URL can re-report failure", () => {
+    const noPrice = (asin: string) =>
+      `<div id="dp" data-asin="${asin}"><span id="productTitle">X</span></div>`;
+    const d = makeDeps(URL1, noPrice("B0TESTASIN"));
+    startObserver(d.deps);
+    expect(d.sent.filter((m) => m.type === "pt/extraction-failed")).toHaveLength(1);
+
+    d.setUrl("https://www.amazon.com/dp/B0OTHERASI");
+    d.setHtml(noPrice("B0OTHERASI"));
+    d.tickInterval();
+    const failures = d.sent.filter((m) => m.type === "pt/extraction-failed");
+    expect(failures).toHaveLength(2);
+    expect(failures[1]).toMatchObject({
+      reason: "no_price",
+      url: "https://www.amazon.com/dp/B0OTHERASI",
+    });
+  });
+
+  it("ambiguous_price sends extraction-failed and never pt/observation", () => {
+    const d = makeDeps(URL1, AMBIGUOUS_PDP("B0TESTASIN"));
+    startObserver(d.deps);
+    d.mutate();
+    d.flushTimers();
+    expect(d.sent.every((m) => m.type !== "pt/observation")).toBe(true);
+    const failures = d.sent.filter((m) => m.type === "pt/extraction-failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      reason: "ambiguous_price",
+      extraction: { priceConfidence: "AMBIGUOUS", adapterVersion: "amazon@1" },
+    });
   });
 });

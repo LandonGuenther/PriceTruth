@@ -3,12 +3,19 @@ import {
   parsePriceToCents,
   type RetailerObservation,
 } from "@pricetruth/shared";
-import type { ExtractionResult, RetailerAdapter } from "../types.js";
+import type {
+  ExtractionConfidence,
+  ExtractionMeta,
+  ExtractionResult,
+  RetailerAdapter,
+} from "../types.js";
 import { extractFirstPrice } from "../utils.js";
 import { BESTBUY_SELECTORS as S } from "./selectors.js";
 
+export const BESTBUY_ADAPTER_VERSION = "bestbuy@1";
+
 const PATH_SKU = /\/site\/[^/]+\/(\d{6,8})\.p/;
-// New-format PDP: /product/<slug>/<opaque code> — may be followed by more
+// New-format PDP: /product/<slug>/<opaque code> - may be followed by more
 // path segments, e.g. /product/foo/J3GWRW4HCC/sku/6665563.
 const PATH_PRODUCT = /^\/product\/[^/]+\/[A-Z0-9]{6,12}(?:\/|$)/i;
 const PATH_PRODUCT_SKU = /^\/product\/[^/]+\/[A-Z0-9]{6,12}\/sku\/(\d{6,8})/i;
@@ -89,27 +96,68 @@ function extractSkuFromDoc(doc: Document, product: JsonLdProduct | null): string
   return null;
 }
 
-// Ancestor data-testids observed on /product/ pages that hold cross-sell,
-// carousel, sponsored or warranty-tile price blocks — not the product's price.
-const CONTAMINATED_ANCESTOR = /carousel|sponsored|accessor|cross-?sell|priceBlockTestId/i;
+function resolveIdentity(
+  url: URL,
+  doc: Document,
+  product: JsonLdProduct | null,
+): { externalId: string | null; method?: string; confidence?: ExtractionConfidence } {
+  const pageSku = extractSkuFromDoc(doc, product);
+  if (pageSku) {
+    const method = extractJsonLdSku(product)
+      ? "jsonld_sku"
+      : doc.querySelector(S.skuLabelText)
+        ? "sku_label"
+        : doc.querySelector(S.skuIdAttr)
+          ? "data_sku_id"
+          : "sku_spec";
+    return { externalId: pageSku, method, confidence: "HIGH" };
+  }
+  const urlSku = extractIdFromUrl(url);
+  if (urlSku) return { externalId: urlSku, method: "url_sku", confidence: "MEDIUM" };
+  return { externalId: null };
+}
+
+// Ancestor data-testids / classes that hold cross-sell, carousel, sponsored,
+// warranty, marketplace-adjacent, or review-rail price blocks.
+const CONTAMINATED_ANCESTOR =
+  /carousel|sponsored|accessor|cross-?sell|priceBlockTestId|marketplace|fulfilled-by|review|ratings-overview|also-viewed|similar-items|warranty|protection.?plan/i;
 
 function inContaminatedSubtree(el: Element): boolean {
-  for (let n = el.parentElement; n; n = n.parentElement) {
-    if (CONTAMINATED_ANCESTOR.test(n.getAttribute("data-testid") ?? "")) return true;
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const testid = n.getAttribute("data-testid") ?? "";
+    const cls = typeof n.className === "string" ? n.className : String(n.className ?? "");
+    const id = n.id ?? "";
+    if (CONTAMINATED_ANCESTOR.test(`${testid} ${cls} ${id}`)) return true;
   }
   return false;
 }
 
-function mainPriceBlock(doc: Document): Element | null {
-  for (const el of doc.querySelectorAll(S.priceBlock)) {
-    if (!inContaminatedSubtree(el)) return el;
+/** Comp. Value / Was text must never be treated as the customer price. */
+function isReferenceOnlyNode(el: Element): boolean {
+  const testid = el.getAttribute("data-testid") ?? "";
+  const lu = el.getAttribute("data-lu-target") ?? "";
+  if (/regular-price|comp_value/i.test(`${testid} ${lu}`)) return true;
+  if (el.closest('[data-testid="price-block-regular-price"]')) return true;
+  if (el.closest('[data-lu-target="comp_value"]')) return true;
+  const t = text(el);
+  if (/comp\.?\s*value|^\s*was\b|^\s*reg\.?\b/i.test(t) && !/customer/i.test(testid)) {
+    return true;
   }
-  return null;
+  return false;
+}
+
+function uncontaminatedPriceBlocks(doc: Document): Element[] {
+  const blocks: Element[] = [];
+  for (const el of doc.querySelectorAll(S.priceBlock)) {
+    if (!inContaminatedSubtree(el)) blocks.push(el);
+  }
+  return blocks;
 }
 
 function firstUncontaminated(root: ParentNode, selector: string): Element | null {
   for (const el of root.querySelectorAll(selector)) {
-    if (!inContaminatedSubtree(el)) return el;
+    if (inContaminatedSubtree(el) || isReferenceOnlyNode(el)) continue;
+    return el;
   }
   return null;
 }
@@ -120,46 +168,91 @@ function firstOffer(product: JsonLdProduct | null) {
   return Array.isArray(offers) ? offers[0] : offers;
 }
 
+type PriceOutcome =
+  | { kind: "ok"; cents: number; method: string; confidence: ExtractionConfidence }
+  | { kind: "ambiguous"; method: string }
+  | { kind: "none" };
+
+function customerCentsFromBlock(block: Element): number | null {
+  const el = block.querySelector(S.priceBlockCustomer);
+  if (!el) return null;
+  return parsePriceToCents(text(el));
+}
+
 function extractPrice(
   doc: Document,
   product: JsonLdProduct | null,
   warnings: string[],
-): number | null {
-  const ldPrice = firstOffer(product)?.price;
-  if (ldPrice !== undefined) {
-    const cents = parsePriceToCents(String(ldPrice));
-    if (cents !== null) return cents;
-    warnings.push("JSON-LD offers.price did not parse");
+): PriceOutcome {
+  const blocks = uncontaminatedPriceBlocks(doc);
+  const blockPrices: number[] = [];
+  for (const block of blocks) {
+    const cents = customerCentsFromBlock(block);
+    if (cents !== null) blockPrices.push(cents);
   }
-  const block = mainPriceBlock(doc);
-  if (block) {
-    const el = block.querySelector(S.priceBlockCustomer);
-    const cents = el ? parsePriceToCents(text(el)) : null;
-    if (cents !== null) return cents;
+  const uniqueBlock = [...new Set(blockPrices)];
+  if (uniqueBlock.length > 1) {
+    warnings.push(`conflicting price blocks: ${uniqueBlock.join(",")}`);
+    return { kind: "ambiguous", method: "price_block_conflict" };
   }
+  if (uniqueBlock.length === 1) {
+    return {
+      kind: "ok",
+      cents: uniqueBlock[0]!,
+      method: "price_block_customer",
+      confidence: "HIGH",
+    };
+  }
+
   for (const sel of S.price) {
     const el = firstUncontaminated(doc, sel);
     const cents = el ? parsePriceToCents(text(el)) : null;
-    if (cents !== null) return cents;
+    if (cents !== null) {
+      return { kind: "ok", cents, method: `dom:${sel}`, confidence: "MEDIUM" };
+    }
   }
+
+  const ldPrice = firstOffer(product)?.price;
+  if (ldPrice !== undefined) {
+    const cents = parsePriceToCents(String(ldPrice));
+    if (cents !== null) {
+      return { kind: "ok", cents, method: "jsonld_offers_price", confidence: "MEDIUM" };
+    }
+    warnings.push("JSON-LD offers.price did not parse");
+  }
+
   warnings.push("no price element matched");
-  return null;
+  return { kind: "none" };
 }
 
-function extractReference(doc: Document): number | null {
-  const block = mainPriceBlock(doc);
-  if (block) {
+function extractReference(
+  doc: Document,
+): { cents: number; method: string; confidence: ExtractionConfidence } | null {
+  const blocks = uncontaminatedPriceBlocks(doc);
+  for (const block of blocks) {
     for (const sel of [S.priceBlockCompValue, S.priceBlockRegular]) {
       const el = block.querySelector(sel);
       const cents = el ? (parsePriceToCents(text(el)) ?? extractFirstPrice(text(el))) : null;
-      if (cents !== null) return cents;
+      if (cents !== null) {
+        return {
+          cents,
+          method: sel.includes("comp_value") ? "comp_value" : "regular_price",
+          confidence: "HIGH",
+        };
+      }
     }
   }
   for (const sel of S.reference) {
-    const el = firstUncontaminated(doc, sel);
-    // "Was $399.99" / "Comp. Value: $274.99" — take the first $ amount.
+    const el = (() => {
+      for (const candidate of doc.querySelectorAll(sel)) {
+        if (!inContaminatedSubtree(candidate)) return candidate;
+      }
+      return null;
+    })();
     const cents = el ? (parsePriceToCents(text(el)) ?? extractFirstPrice(text(el))) : null;
-    if (cents !== null) return cents;
+    if (cents !== null) {
+      return { cents, method: `reference:${sel}`, confidence: "MEDIUM" };
+    }
   }
   return null;
 }
@@ -167,7 +260,6 @@ function extractReference(doc: Document): number | null {
 function extractInStock(doc: Document, product: JsonLdProduct | null): boolean | undefined {
   const availability = firstOffer(product)?.availability;
   if (!availability) {
-    // New-format PDP: an add-to-cart button implies sellable stock.
     return doc.querySelector(S.addToCart) ? true : undefined;
   }
   if (availability.includes("InStock")) return true;
@@ -179,6 +271,14 @@ function extractBrand(product: JsonLdProduct | null): string | undefined {
   const brand = product?.brand;
   if (!brand) return undefined;
   return (typeof brand === "string" ? brand : brand.name) ?? undefined;
+}
+
+function baseMeta(warnings: string[], partial: Partial<ExtractionMeta> = {}): ExtractionMeta {
+  return {
+    adapterVersion: BESTBUY_ADAPTER_VERSION,
+    warnings: [...warnings],
+    ...partial,
+  };
 }
 
 export const bestbuyAdapter: RetailerAdapter = {
@@ -195,34 +295,81 @@ export const bestbuyAdapter: RetailerAdapter = {
 
   extractExternalId(url: URL, doc: Document): string | null {
     // Page SKU is authoritative (new-format URLs carry no SKU at all).
-    return extractSkuFromDoc(doc, findJsonLdProduct(doc)) ?? extractIdFromUrl(url);
+    return resolveIdentity(url, doc, findJsonLdProduct(doc)).externalId;
   },
 
   extract(doc: Document, url: URL, now: Date): ExtractionResult {
     const warnings: string[] = [];
     if (!this.matchesUrl(url)) {
-      return { ok: false, reason: "not_product_page", warnings };
+      return {
+        ok: false,
+        reason: "not_product_page",
+        warnings,
+        meta: baseMeta(warnings),
+      };
     }
     const product = findJsonLdProduct(doc);
     const urlSku = extractIdFromUrl(url);
     const jsonLdSku = extractJsonLdSku(product);
-    const externalId = extractSkuFromDoc(doc, product) ?? urlSku;
+    const identity = resolveIdentity(url, doc, product);
     if (urlSku && jsonLdSku && urlSku !== jsonLdSku) {
       warnings.push("url sku differs from page sku");
     }
-    if (!externalId) {
-      return { ok: false, reason: "no_identifier", warnings };
+    if (doc.querySelector(S.marketplaceBadge)) {
+      warnings.push("marketplace badge present");
+    }
+    if (!identity.externalId) {
+      return {
+        ok: false,
+        reason: "no_identifier",
+        warnings,
+        meta: baseMeta(warnings, {
+          identityMethod: "none",
+          identityConfidence: "LOW",
+        }),
+      };
     }
 
-    const priceCents = extractPrice(doc, product, warnings);
-    if (priceCents === null) {
-      return { ok: false, reason: "no_price", warnings };
+    const price = extractPrice(doc, product, warnings);
+    if (price.kind === "ambiguous") {
+      return {
+        ok: false,
+        reason: "ambiguous_price",
+        warnings,
+        meta: baseMeta(warnings, {
+          identityMethod: identity.method,
+          identityConfidence: identity.confidence,
+          priceMethod: price.method,
+          priceConfidence: "AMBIGUOUS",
+        }),
+      };
+    }
+    if (price.kind === "none") {
+      return {
+        ok: false,
+        reason: "no_price",
+        warnings,
+        meta: baseMeta(warnings, {
+          identityMethod: identity.method,
+          identityConfidence: identity.confidence,
+          priceMethod: "none",
+          priceConfidence: "LOW",
+        }),
+      };
     }
 
-    let referencePriceCents = extractReference(doc) ?? undefined;
-    if (referencePriceCents !== undefined && referencePriceCents <= priceCents) {
-      warnings.push("reference price not above price; dropped");
-      referencePriceCents = undefined;
+    let referencePriceCents: number | undefined;
+    let referenceMethod: string | undefined;
+    let referenceConfidence: ExtractionConfidence | undefined;
+    const ref = extractReference(doc);
+    if (ref) {
+      if (ref.cents <= price.cents) {
+        warnings.push("reference price not above price; dropped");
+      } else {
+        referencePriceCents = ref.cents;
+        referenceMethod = ref.method;
+        referenceConfidence = ref.confidence;
+      }
     }
 
     const title =
@@ -230,19 +377,32 @@ export const bestbuyAdapter: RetailerAdapter = {
 
     const observation: RetailerObservation = {
       retailer: "bestbuy",
-      externalId,
+      externalId: identity.externalId,
       url: url.href,
       title,
       brand: extractBrand(product),
       modelNumber: product?.model ?? product?.mpn ?? undefined,
       gtin: product?.gtin13 ?? product?.gtin12 ?? product?.gtin ?? undefined,
-      priceCents,
+      priceCents: price.cents,
       referencePriceCents,
       currency: "USD",
       inStock: extractInStock(doc, product),
       source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
       observedAt: now.toISOString(),
     };
-    return { ok: true, observation, warnings };
+
+    return {
+      ok: true,
+      observation,
+      warnings,
+      meta: baseMeta(warnings, {
+        identityMethod: identity.method,
+        identityConfidence: identity.confidence,
+        priceMethod: price.method,
+        priceConfidence: price.confidence,
+        referenceMethod,
+        referenceConfidence,
+      }),
+    };
   },
 };
