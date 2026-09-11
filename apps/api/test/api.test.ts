@@ -827,4 +827,28 @@ describeIfDb("api integration", () => {
     expect(ev[1]!.candidateProductId).toBe(other.id);
     await app.close();
   });
+
+  it("invalid identifiers are asserted but never become ProductIdentifiers", async () => {
+    const app = await makeApp();
+    // bad check digit → valid: false on the GTIN assertion
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ gtin: "12345678901234" }),
+    });
+    const listing = await listingOf("amazon", "B0TESTASIN");
+    const gtinAssertion = await prisma.identifierAssertion.findFirstOrThrow({
+      where: { listingId: listing.id, type: "GTIN" },
+    });
+    expect(gtinAssertion.valid).toBe(false);
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: listing.productId! },
+      include: { identifiers: true },
+    });
+    expect(product.identifiers.map((i) => i.type).sort()).toEqual([
+      "ASIN",
+      "MANUFACTURER_MODEL",
+    ]);
+    await app.close();
+  });
 });

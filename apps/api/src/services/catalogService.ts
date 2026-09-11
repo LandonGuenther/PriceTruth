@@ -124,7 +124,11 @@ async function createProductForListing(
   const product = await tx.product.create({
     data: { title: listing.title, brand: listing.brand, modelNumber: listing.modelNumber },
   });
-  await addIdentifiersToProduct(tx, product.id, identifiers);
+  await addIdentifiersToProduct(
+    tx,
+    product.id,
+    identifiers.filter((i) => i.valid),
+  );
   return product.id;
 }
 
