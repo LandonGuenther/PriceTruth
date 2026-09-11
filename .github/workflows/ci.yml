@@ -38,9 +38,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Phase 2: run `pnpm --filter @pricetruth/api exec prisma generate` and
-      # `pnpm --filter @pricetruth/api exec prisma migrate deploy` here, once
-      # the API package and Prisma schema exist.
+      - run: pnpm --filter @pricetruth/api exec prisma generate
+      - run: pnpm --filter @pricetruth/api exec prisma migrate deploy
 
       - run: pnpm lint
       - run: pnpm format:check

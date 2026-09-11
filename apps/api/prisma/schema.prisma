@@ -1,0 +1,97 @@
+// PriceTruth data model (V1).
+//
+// Immutability rules:
+// - PriceObservation rows are append-only: the API never updates or deletes them.
+//   `referencePriceCents` lives on the same row because a reference price is
+//   observed together with the price — there is no separate
+//   ReferencePriceObservation table in the MVP.
+// - Listing holds descriptive metadata only (no price fields, so there is no
+//   mutable "currentPrice" to go stale). Its metadata fields MAY be updated to
+//   the newest observed values.
+// - MVP scope: a Product is created 1:1 per Listing on first observation. There
+//   is no cross-retailer product merging yet; ProductIdentifier records the
+//   identifiers we saw (ASIN / BESTBUY_SKU / GTIN) so merging can be added later.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Retailer {
+  id          String    @id // "amazon" | "bestbuy" — matches RetailerId in @pricetruth/shared
+  displayName String
+  createdAt   DateTime  @default(now())
+  listings    Listing[]
+}
+
+enum IdentifierType {
+  GTIN
+  UPC
+  EAN
+  MPN
+  ASIN
+  BESTBUY_SKU
+}
+
+model Product {
+  id          String              @id @default(uuid())
+  title       String
+  brand       String?
+  modelNumber String?
+  createdAt   DateTime            @default(now())
+  identifiers ProductIdentifier[]
+  listings    Listing[]
+}
+
+model ProductIdentifier {
+  id        String         @id @default(uuid())
+  productId String
+  product   Product        @relation(fields: [productId], references: [id])
+  type      IdentifierType
+  value     String
+
+  @@unique([type, value])
+}
+
+model Listing {
+  id          String             @id @default(uuid())
+  retailerId  String
+  retailer    Retailer           @relation(fields: [retailerId], references: [id])
+  externalId  String
+  url         String
+  title       String
+  brand       String?
+  modelNumber String?
+  gtin        String?
+  productId   String?
+  product     Product?           @relation(fields: [productId], references: [id])
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  observations PriceObservation[]
+
+  @@unique([retailerId, externalId])
+}
+
+model PriceObservation {
+  id                  String   @id @default(uuid())
+  listingId           String
+  listing             Listing  @relation(fields: [listingId], references: [id])
+  priceCents          Int
+  referencePriceCents Int?
+  currency            String   @db.Char(3)
+  inStock             Boolean?
+  variant             Json?
+  source              String
+  observedAt          DateTime
+  receivedAt          DateTime @default(now())
+  synthetic           Boolean  @default(false)
+  clientVersion       String?
+  userAgentHash       String?
+  ingestKey           String?
+
+  @@index([listingId, observedAt])
+}
