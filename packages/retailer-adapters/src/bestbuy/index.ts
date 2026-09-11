@@ -9,7 +9,7 @@ import { extractFirstPrice } from "../utils.js";
 import { BESTBUY_SELECTORS as S } from "./selectors.js";
 
 const PATH_SKU = /\/site\/[^/]+\/(\d{6,8})\.p/;
-// New-format PDP: /product/<slug>/<opaque code> — may be followed by more
+// New-format PDP: /product/<slug>/<opaque code> - may be followed by more
 // path segments, e.g. /product/foo/J3GWRW4HCC/sku/6665563.
 const PATH_PRODUCT = /^\/product\/[^/]+\/[A-Z0-9]{6,12}(?:\/|$)/i;
 const PATH_PRODUCT_SKU = /^\/product\/[^/]+\/[A-Z0-9]{6,12}\/sku\/(\d{6,8})/i;
@@ -91,8 +91,10 @@ function extractSkuFromDoc(doc: Document, product: JsonLdProduct | null): string
 }
 
 // Ancestor data-testids observed on /product/ pages that hold cross-sell,
-// carousel, sponsored or warranty-tile price blocks — not the product's price.
-const CONTAMINATED_ANCESTOR = /carousel|sponsored|accessor|cross-?sell|priceBlockTestId/i;
+// carousel, sponsored, warranty-tile, financing, open-box, or bundle-upsell
+// price blocks - not the product's primary cash price.
+const CONTAMINATED_ANCESTOR =
+  /carousel|sponsored|accessor|cross-?sell|priceBlockTestId|financ|installment|open-?box|bundle|warranty|protection/i;
 
 function inContaminatedSubtree(el: Element): boolean {
   for (let n = el.parentElement; n; n = n.parentElement) {
@@ -121,30 +123,69 @@ function firstOffer(product: JsonLdProduct | null) {
   return Array.isArray(offers) ? offers[0] : offers;
 }
 
+/** Copy that marks a dollar amount as financing / month, not cash price. */
+const FINANCING_CTX = /\/\s*mo(?:nth)?\b|\bper\s+month\b|\b\d+\s+months?\b|\bfinancing\b|\baffirm\b/i;
+
+type PriceOutcome =
+  | { kind: "ok"; cents: number }
+  | { kind: "none" }
+  | { kind: "ambiguous" };
+
+function looksLikeFinancing(el: Element | null): boolean {
+  if (!el) return false;
+  const host = el.closest('[data-testid="price-block"], [data-testid*="financ" i], [class*="financ" i]') ?? el.parentElement;
+  return FINANCING_CTX.test(text(host).replace(/\s+/g, " "));
+}
+
+function domCustomerPrice(doc: Document, warnings: string[]): number | null {
+  const block = mainPriceBlock(doc);
+  if (block) {
+    const el = block.querySelector(S.priceBlockCustomer);
+    if (el && looksLikeFinancing(el)) {
+      warnings.push("financing/month price ignored");
+    } else {
+      const cents = el ? parsePriceToCents(text(el)) : null;
+      if (cents !== null) return cents;
+    }
+  }
+  for (const sel of S.price) {
+    const el = firstUncontaminated(doc, sel);
+    if (!el) continue;
+    if (looksLikeFinancing(el)) {
+      warnings.push("financing/month price ignored");
+      continue;
+    }
+    const cents = parsePriceToCents(text(el));
+    if (cents !== null) return cents;
+  }
+  return null;
+}
+
 function extractPrice(
   doc: Document,
   product: JsonLdProduct | null,
   warnings: string[],
-): number | null {
+): PriceOutcome {
+  let ldCents: number | null = null;
   const ldPrice = firstOffer(product)?.price;
   if (ldPrice !== undefined) {
-    const cents = parsePriceToCents(String(ldPrice));
-    if (cents !== null) return cents;
-    warnings.push("JSON-LD offers.price did not parse");
+    ldCents = parsePriceToCents(String(ldPrice));
+    if (ldCents === null) warnings.push("JSON-LD offers.price did not parse");
   }
-  const block = mainPriceBlock(doc);
-  if (block) {
-    const el = block.querySelector(S.priceBlockCustomer);
-    const cents = el ? parsePriceToCents(text(el)) : null;
-    if (cents !== null) return cents;
+
+  const domCents = domCustomerPrice(doc, warnings);
+
+  if (ldCents !== null && domCents !== null && ldCents !== domCents) {
+    warnings.push("JSON-LD price conflicts with DOM price");
+    return { kind: "ambiguous" };
   }
-  for (const sel of S.price) {
-    const el = firstUncontaminated(doc, sel);
-    const cents = el ? parsePriceToCents(text(el)) : null;
-    if (cents !== null) return cents;
+
+  const cents = ldCents ?? domCents;
+  if (cents === null) {
+    warnings.push("no price element matched");
+    return { kind: "none" };
   }
-  warnings.push("no price element matched");
-  return null;
+  return { kind: "ok", cents };
 }
 
 function extractReference(doc: Document): number | null {
@@ -158,7 +199,7 @@ function extractReference(doc: Document): number | null {
   }
   for (const sel of S.reference) {
     const el = firstUncontaminated(doc, sel);
-    // "Was $399.99" / "Comp. Value: $274.99" — take the first $ amount.
+    // "Was $399.99" / "Comp. Value: $274.99" - take the first $ amount.
     const cents = el ? (parsePriceToCents(text(el)) ?? extractFirstPrice(text(el))) : null;
     if (cents !== null) return cents;
   }
@@ -215,10 +256,14 @@ export const bestbuyAdapter: RetailerAdapter = {
       return { ok: false, reason: "no_identifier", warnings };
     }
 
-    const priceCents = extractPrice(doc, product, warnings);
-    if (priceCents === null) {
+    const priceOutcome = extractPrice(doc, product, warnings);
+    if (priceOutcome.kind === "none") {
       return { ok: false, reason: "no_price", warnings };
     }
+    if (priceOutcome.kind === "ambiguous") {
+      return { ok: false, reason: "ambiguous_price", warnings };
+    }
+    const priceCents = priceOutcome.cents;
 
     let referencePriceCents = extractReference(doc) ?? undefined;
     if (referencePriceCents !== undefined && referencePriceCents <= priceCents) {

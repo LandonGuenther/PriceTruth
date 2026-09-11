@@ -1,0 +1,52 @@
+<!--
+  Open-box offer price sits beside the new customer price. Open-box tile is
+  contaminated; new cash price must win.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Headphones Open-Box - Best Buy</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Acme Over-Ear Headphones - Black",
+        "sku": "6502001",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "offers": {
+          "@type": "Offer",
+          "price": 129.99,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "sku": "6502001"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme Over-Ear Headphones - Black</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6502001</div>
+
+    <div data-testid="open-box-offers">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$89.99</span>
+        </div>
+      </div>
+    </div>
+
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$129.99</span>
+        </div>
+        <div data-testid="price-block-regular-price">
+          <span class="sr-only">The price was </span><span>$159.99</span>
+        </div>
+      </div>
+    </div>
+
+    <button data-testid="pdp-add-to-cart-6502001" type="button">Add to cart</button>
+  </body>
+</html>
