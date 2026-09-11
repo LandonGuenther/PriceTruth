@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  type DataSource,
   type ObservationStatus,
   type PrismaClient,
   type PriceType as PrismaPriceType,
@@ -380,13 +381,44 @@ async function maybeEnrichBestBuy(
   if (obs.retailer !== "bestbuy") return "skipped";
   if (!config.BESTBUY_API_KEY) return "disabled";
 
-  const now = new Date();
   try {
     const dataSource = await prisma.dataSource.findUnique({
       where: { key: OBSERVATION_SOURCES.BESTBUY_API },
     });
     if (!dataSource) return "error";
+    return await recordBestBuyApiObservation(prisma, {
+      dataSource,
+      listingId,
+      sku: obs.externalId,
+      apiKey: config.BESTBUY_API_KEY,
+      fetchImpl,
+    });
+  } catch {
+    return "error";
+  }
+}
 
+export interface RecordBestBuyApiObservationInput {
+  dataSource: Pick<DataSource, "id" | "trustClass">;
+  listingId: string;
+  sku: string;
+  apiKey: string;
+  fetchImpl?: FetchLike;
+  now?: Date;
+}
+
+/**
+ * Fetch the official Best Buy Products API price for one listing and record it
+ * as a `bestbuy:products-api` observation. Shared by ingest-time enrichment
+ * and the `bestbuy-refresh` job. Never throws; never mutates existing rows.
+ */
+export async function recordBestBuyApiObservation(
+  prisma: PrismaClient,
+  input: RecordBestBuyApiObservationInput,
+): Promise<"recorded" | "duplicate" | "error"> {
+  const { dataSource, listingId, sku, apiKey, fetchImpl } = input;
+  const now = input.now ?? new Date();
+  try {
     // Respect Best Buy's rate limits: never call the API if we recorded an
     // enrichment row for this listing within the last 60 minutes.
     const recent = await prisma.priceObservation.findFirst({
@@ -402,7 +434,7 @@ async function maybeEnrichBestBuy(
     });
     if (recent) return "duplicate";
 
-    const info = await fetchBestBuyProduct(obs.externalId, config.BESTBUY_API_KEY, fetchImpl);
+    const info = await fetchBestBuyProduct(sku, apiKey, fetchImpl);
     if (!info) return "error";
 
     const { effectiveAt, clientSkewSeconds } = resolveObservationTime({
