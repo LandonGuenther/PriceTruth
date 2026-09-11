@@ -1,7 +1,7 @@
 # Live beta report
 
-Status: **BLOCKED ON SECRETS** (Cursor prep complete; waiting on owner to inject
-`FLY_API_TOKEN` + `DATABASE_URL` into the Cloud Agent environment, then ping this thread)
+Status: **BLOCKED ON SECRETS** (repo + local gates ready; waiting on secure injection of
+`FLY_API_TOKEN` + Neon `DATABASE_URL` into the Cloud Agent environment)
 
 ## STATUS
 
@@ -9,7 +9,7 @@ Status: **BLOCKED ON SECRETS** (Cursor prep complete; waiting on owner to inject
 |------|-------|
 | Repo bring-up (Devin) | Done on `devin/live-beta-bringup` |
 | Cursor continuation branch | `cursor/live-beta-bringup` |
-| Local gates | Green (373 tests) |
+| Local gates | Green (373 tests; lint/typecheck/build re-verified) |
 | Neon staging | Not re-verified in this agent (no `DATABASE_URL` / `NEON_API_KEY`) |
 | Fly API deploy | Blocked (`FLY_API_TOKEN` missing) |
 | Extension beta package | Blocked (needs real HTTPS API URL) |
