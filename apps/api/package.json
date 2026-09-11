@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate deploy",
     "catalog": "tsx scripts/catalog.ts",
     "jobs": "tsx scripts/jobs.ts",
+    "ops": "tsx scripts/ops.ts",
     "loadgen": "tsx scripts/loadgen.ts",
     "bench": "tsx scripts/bench.ts",
     "db:migrate:dev": "prisma migrate dev",

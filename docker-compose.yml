@@ -15,5 +15,21 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    profiles: ["api"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://pricetruth:pricetruth@db:5432/pricetruth
+      HOST: 0.0.0.0
+      LOG_LEVEL: info
+
 volumes:
   pricetruth-db:

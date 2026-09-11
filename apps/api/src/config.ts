@@ -49,6 +49,7 @@ const envSchema = z
     RATE_LIMIT_HEALTH_PER_MINUTE: z.coerce.number().int().positive().default(600),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
     BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(65536),
+    SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(100).default(10000),
     /** When set (≥32 chars), enables /internal/* routes. */
     INTERNAL_API_TOKEN: z
       .string()

@@ -61,6 +61,8 @@ export class ObservationRejected extends Error {
 export interface IngestResult {
   accepted: boolean;
   duplicate: boolean;
+  /** Observation status after ingest (adds ACCEPTED/QUARANTINED visibility). */
+  status: ObservationStatus;
   listingId: string;
   /** BigInt primary key serialised as a decimal string. */
   observationId: string;
@@ -191,7 +193,7 @@ async function findDuplicate(prisma: PrismaClient, listingId: string, fields: Ob
       },
     },
     orderBy: { effectiveAt: "desc" },
-    select: { id: true },
+    select: { id: true, status: true },
   });
 }
 
@@ -229,7 +231,7 @@ async function insertObservation(
         clientVersion: meta.clientVersion,
         extractorVersion: fields.extractorVersion,
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     // Every insert is audited: RECEIVED is transient and only ever appears as
     // fromStatus on this first event.
@@ -320,8 +322,10 @@ export async function ingestObservation(
   const existing = await findDuplicate(prisma, listing.id, fields);
   let observationId: bigint;
   let accepted: boolean;
+  let status: IngestResult["status"];
   if (existing) {
     observationId = existing.id;
+    status = existing.status;
     accepted = false;
   } else {
     // Anomaly check runs against recent eligible history; quarantined rows are
@@ -346,6 +350,7 @@ export async function ingestObservation(
         : { status: "ACCEPTED", actor: INGEST_ACTOR, reason: "accepted" },
     );
     observationId = created.id;
+    status = created.status;
     accepted = true;
   }
 
@@ -358,6 +363,7 @@ export async function ingestObservation(
   return {
     accepted,
     duplicate: !accepted,
+    status,
     listingId: listing.id,
     observationId: observationId.toString(),
     enrichment: { bestbuyApi: enrichment },

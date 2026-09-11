@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyError, type FastifyInstance } from "fastify";
 import { OBSERVATION_SCHEMA_VERSION } from "@pricetruth/shared";
 import type { AppConfig } from "./config.js";
 import {
@@ -15,12 +15,20 @@ import { listingRoutes } from "./routes/listings.js";
 import { observationRoutes } from "./routes/observations.js";
 import { ObservationRejected } from "./services/observationService.js";
 import type { FetchLike } from "./services/bestbuyApi.js";
+import { metrics, type Metrics } from "./metrics.js";
+import { registerInternalRoutes } from "./routes/internal.js";
+import { CLIENT_VERSION_HEADER } from "@pricetruth/shared";
 
 declare module "fastify" {
   interface FastifyInstance {
     prisma: PrismaClient;
     config: AppConfig;
     fetchImpl: FetchLike | undefined;
+    metrics: Metrics;
+  }
+  interface FastifyRequest {
+    /** Set by the ingest route so the access log can report the outcome. */
+    ingestOutcome: string | undefined;
   }
 }
 
@@ -37,16 +45,30 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   // predicate trusting the n proxies closest to this server.
   const trustProxy = opts.config.TRUST_PROXY;
   const app = Fastify({
-    logger: false,
+    logger: {
+      level: opts.config.LOG_LEVEL,
+      redact: {
+        paths: [
+          "req.headers.authorization",
+          "req.headers.cookie",
+          "res.headers['set-cookie']",
+          "*.DATABASE_URL",
+          "*.S3_SECRET_ACCESS_KEY",
+          "*.password",
+        ],
+        remove: true,
+      },
+    },
+    // disableRequestLogging is deprecated in fastify 5.12; LogController is the
+    // non-deprecated equivalent. Only our onResponse hook emits a request line.
+    logController: new LogController({ disableRequestLogging: true }),
     requestTimeout: opts.config.REQUEST_TIMEOUT_MS,
     bodyLimit: opts.config.BODY_LIMIT_BYTES,
+    forceCloseConnections: "idle",
     trustProxy:
       typeof trustProxy === "number"
         ? (_addr: string, hop: number) => hop < trustProxy
         : trustProxy,
-    // disableRequestLogging was dropped: deprecated in fastify 5.12 (FSTDEP023);
-    // logger is off here and M4 wires request logging via logController.
-
     // Honour a client-supplied x-request-id (validated below), else generate one.
     requestIdHeader: "x-request-id",
     genReqId: () => randomUUID(),
@@ -55,6 +77,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.decorate("prisma", opts.prisma);
   app.decorate("config", opts.config);
   app.decorate("fetchImpl", opts.fetchImpl);
+  app.decorate("metrics", metrics);
 
   const allowedExtensionIds = opts.config.ALLOWED_EXTENSION_IDS
     ? new Set(opts.config.ALLOWED_EXTENSION_IDS)
@@ -123,6 +146,38 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
   });
 
+  // Single access-log line + request metrics per completed request.
+  app.addHook("onResponse", async (request, reply) => {
+    const operation = request.routeOptions?.url ?? "not_found";
+    const durationMs = Math.round(reply.elapsedTime * 10) / 10;
+    const params = request.params as { retailer?: string } | undefined;
+    const body = request.body as { retailer?: string } | null | undefined;
+    const retailer = params?.retailer ?? body?.retailer;
+    const outcome = request.ingestOutcome ?? (reply.statusCode >= 400 ? "error" : "ok");
+
+    metrics.inc("requests_total", {
+      operation,
+      status: String(reply.statusCode),
+    });
+    metrics.observe(operation, durationMs);
+    if (request.ingestOutcome)
+      metrics.inc("observations_total", { outcome: request.ingestOutcome });
+
+    request.log.info(
+      {
+        requestId: request.id,
+        operation,
+        method: request.method,
+        statusCode: reply.statusCode,
+        durationMs,
+        retailer,
+        clientVersion: request.headers[CLIENT_VERSION_HEADER],
+        outcome,
+      },
+      "request",
+    );
+  });
+
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({ error: "not_found", message: "Unknown route" });
   });
@@ -163,6 +218,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   healthRoutes(app);
   observationRoutes(app);
   listingRoutes(app);
+  registerInternalRoutes(app, opts.prisma, opts.config);
 
   return app;
 }

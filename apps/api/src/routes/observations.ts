@@ -59,6 +59,12 @@ export function observationRoutes(app: FastifyInstance): void {
         app.fetchImpl,
       );
 
+      request.ingestOutcome = result.duplicate
+        ? "duplicate"
+        : result.status === "QUARANTINED"
+          ? "quarantined"
+          : "accepted";
+
       return reply.status(result.accepted ? 201 : 200).send({ ...result, apiVersion: API_VERSION });
     },
   );

@@ -109,11 +109,16 @@ Response 201:
 {
   "accepted": true,
   "duplicate": false,
+  "status": "ACCEPTED",
   "listingId": "…",
   "observationId": "…",
   "enrichment": { "bestbuyApi": "skipped" }
 }
 ```
+
+`status` is the row's `ObservationStatus` after ingest (`ACCEPTED` |
+`QUARANTINED` | `CORROBORATED` | `EXCLUDED`); for duplicates it reflects the
+existing row's status, which may be `QUARANTINED` or already `CORROBORATED`.
 
 `observationId` is the row's BIGINT key serialised as a decimal string (JSON has
 no 64-bit integer). Duplicates (same price/reference/currency/dataSource within
@@ -141,3 +146,45 @@ excluded counts (`synthetic`, `quarantined`, `excluded`, `priceType`).
 `days`: integer 1–730, default 180. Returns `HistoryResponse` — raw observation
 points (ascending; each point's timestamp is `effectiveAt`, plus `source` = the
 DataSource key) and the daily-median series used by scoring.
+
+## `GET /internal/metrics`
+
+Process-local counters, no auth (localhost/ops use only). JSON:
+`{ counters: [{ name, labels, count }], durations: [{ operation, count, p50,
+p95, max }] }`. `?format=prometheus` renders the same counters and duration
+quantiles in Prometheus text exposition format. Counters:
+`requests_total{operation,status}`, `observations_total{outcome}`
+(accepted|duplicate|quarantined), `job_runs_total{job,status}`
+(succeeded|failed|skipped_locked); `request_duration_ms` per route. Process-local
+— with multiple API replicas, sum/aggregate externally.
+
+## `GET /internal/status`
+
+Requires `Authorization: Bearer <INTERNAL_API_TOKEN>` (constant-time compare;
+sha256-hashed before `timingSafeEqual`). When `INTERNAL_API_TOKEN` is unset —
+or the token is wrong — the route returns 404 to reduce discoverability. The
+payload mirrors `pnpm --filter @pricetruth/api ops status`:
+
+- `latestObservationReceivedAt`, `observationsLastHour`, `observationsLast24h`,
+  `statusDistribution` (observation count by status)
+- `rollup`: `{ checkpoint, lastRun, lagObservations }` (JobRun row serialised;
+  `lagObservations` = newest observation id − cursor)
+- `archive`: `{ checkpoint, lastSuccessAt, lagObservations, batches }`
+- `counts`: retailers / listings / products / families / dataSources
+- `lastJobRuns`: 5 most recent JobRun rows (status, error, workerId, summary)
+
+## Ops CLI
+
+`pnpm --filter @pricetruth/api ops status` prints the same JSON as
+`/internal/status` straight from the DB (no auth needed — it already holds
+`DATABASE_URL`).
+
+## Container
+
+`apps/api/Dockerfile` builds a production image (multi-stage, node:22-alpine,
+non-root, `CMD node dist/src/server.js`, healthcheck on `/health`).
+`docker compose --profile api up` runs api+db together; the image also contains
+the prisma CLI + `apps/api/prisma/` so `docker run ... pnpm exec prisma migrate
+deploy` works in-container. SIGTERM/SIGINT drain in-flight requests
+(`forceCloseConnections: "idle"`) and disconnect Prisma; hard exit after
+`SHUTDOWN_TIMEOUT_MS` (default 10 s).

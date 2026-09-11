@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 import type { PrismaClient } from "@prisma/client";
 import { acquireLease, releaseLease, renewLease } from "./lease.js";
+import { metrics } from "../metrics.js";
 
 export interface JobContext {
   /** Aborted on SIGTERM/SIGINT — check between batches and stop cleanly. */
@@ -37,6 +38,7 @@ export async function runJob(
     await prisma.jobRun.create({
       data: { jobName, status: "SKIPPED_LOCKED", finishedAt: new Date(), workerId },
     });
+    metrics.inc("job_runs_total", { job: jobName, status: "skipped_locked" });
     return { skipped: true };
   }
 
@@ -70,6 +72,7 @@ export async function runJob(
               ) as never),
       },
     });
+    metrics.inc("job_runs_total", { job: jobName, status: "succeeded" });
     return { skipped: false, summary };
   } catch (err) {
     await prisma.jobRun.update({
@@ -81,6 +84,7 @@ export async function runJob(
         error: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
       },
     });
+    metrics.inc("job_runs_total", { job: jobName, status: "failed" });
     throw err;
   } finally {
     process.removeListener("SIGTERM", onSignal);

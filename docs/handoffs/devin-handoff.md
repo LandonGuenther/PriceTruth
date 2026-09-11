@@ -93,6 +93,40 @@ None removed. Deprecation policy defined in docs/API_COMPATIBILITY.md
 - Exporter hardening: object-present/no-ledger replays compare sha256
   (equal → backfill ledger; different → `ArchiveIntegrityError`).
 
+## M3 additions
+
+- `docs/IDEMPOTENCY.md`; `Idempotency-Key` header logged, not stored.
+- Protocol-hardening tests (dup query params, deep nesting, array body,
+  Content-Length mismatch, hostile x-request-id, `requestTimeout`).
+- Security headers: `nosniff`, `referrer-policy: no-referrer`,
+  `cache-control: no-store` on `/v1` + `/internal` routes.
+- Best Buy SKU guard (`^\d{1,12}$`) before URL construction (SSRF).
+- SECURITY.md updated; `pnpm audit` finding recorded.
+
+## M4 additions
+
+- Structured logging: `logger: {level, redact}` +
+  `LogController({disableRequestLogging:true})` (non-deprecated in fastify
+  5.12) + a single onResponse access line `{requestId, operation, method,
+statusCode, durationMs, retailer, clientVersion, outcome}`. 4xx log at warn,
+  5xx at error.
+- `src/metrics.ts` process-local counters; `GET /internal/metrics` (JSON +
+  `?format=prometheus`); `GET /internal/status` (Bearer `INTERNAL_API_TOKEN`,
+  constant-time compare, 404 when unset/wrong); `pnpm --filter @pricetruth/api
+ops status` prints the same payload via `getOpsStatus(prisma)` in
+  `src/ops.ts`.
+- Ingest result gains `status` (the row's ObservationStatus — additive);
+  `observations_total{outcome}` metric keyed on accepted|duplicate|quarantined.
+- Graceful shutdown in server.ts: SIGTERM/SIGINT → `app.close()` →
+  `prisma.$disconnect()` → exit 0; hard exit after `SHUTDOWN_TIMEOUT_MS`
+  (default 10000); `forceCloseConnections: "idle"`.
+- `apps/api/Dockerfile` (multi-stage node:22-alpine, non-root, healthcheck on
+  /health, `CMD node dist/src/server.js`, `ARG APP_VERSION`, prisma CLI +
+  `apps/api/prisma/` in image for `migrate deploy`), root `.dockerignore`,
+  docker-compose `api` service under the `api` profile, CI docker build step.
+- `readiness.ts` probes both `../prisma/migrations` (src layout) and
+  `../../prisma/migrations` (dist/src layout).
+
 ## compatibility risks
 
 - 429 response shape changed from Fastify default to

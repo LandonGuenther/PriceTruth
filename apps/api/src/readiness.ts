@@ -1,18 +1,23 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 
-const MIGRATIONS_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../prisma/migrations",
-);
+// Source layout (tsx): src/readiness.ts → ../prisma. Built layout: dist/src/
+// readiness.js → ../../prisma. Probe candidates and use the first that exists.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MIGRATIONS_DIR = ["../prisma/migrations", "../../prisma/migrations"]
+  .map((rel) => path.resolve(HERE, rel))
+  .find((p) => existsSync(p));
 
 export type DatabaseCheck = "ok" | "error";
 export type MigrationsCheck = "ok" | "pending" | "unknown";
 
 /** Latest expected migration name = lexicographically last directory under prisma/migrations. */
-export function expectedLatestMigration(migrationsDir: string = MIGRATIONS_DIR): string | null {
+export function expectedLatestMigration(
+  migrationsDir: string | undefined = MIGRATIONS_DIR,
+): string | null {
+  if (!migrationsDir) return null;
   try {
     const names = readdirSync(migrationsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
