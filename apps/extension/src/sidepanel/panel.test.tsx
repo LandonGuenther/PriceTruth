@@ -80,6 +80,7 @@ const ready: TabState = {
   history,
   ingest: { accepted: true, duplicate: false },
   updatedAt: "2025-06-30T12:00:00.000Z",
+  generation: 1,
 };
 
 afterEach(cleanup);
@@ -88,19 +89,19 @@ describe("Panel", () => {
   it("ready state shows price, advertised discount, scores and labels", () => {
     render(<Panel state={ready} />);
     expect(screen.getByText("Acme Demo Widget 3000")).toBeTruthy();
-    expect(screen.getByText("$299.00")).toBeTruthy();
+    expect(screen.getAllByText("$299.00").length).toBeGreaterThan(0);
     expect(screen.getByText(/40% off store reference of \$499\.00/)).toBeTruthy();
-    expect(screen.getByText(/~6\.3% below typical/)).toBeTruthy();
+    expect(screen.getByText(/~6% below typical recent price/)).toBeTruthy();
     expect(screen.getByText("9/100")).toBeTruthy();
     expect(screen.getByText("78/100")).toBeTruthy();
     expect(screen.getByText("Reference price not supported by our observations")).toBeTruthy();
     expect(screen.getByText("Better than typical")).toBeTruthy();
     expect(screen.getByText("High")).toBeTruthy();
     expect(screen.getByText("180 observations across 180 days")).toBeTruthy();
-    expect(screen.getByText("ASIN B0DEMOASIN", { exact: false })).toBeTruthy();
+    expect(screen.getByText(/ASIN B0DEMOASIN/)).toBeTruthy();
   });
 
-  it("INSUFFICIENT confidence hides numeric scores and shows the notice", () => {
+  it("INSUFFICIENT confidence shows learning card and hides numeric scores", () => {
     const insuff: TabState = {
       ...ready,
       analysis: {
@@ -119,22 +120,33 @@ describe("Panel", () => {
     expect(screen.queryByText("9/100")).toBeNull();
     expect(screen.queryByText("78/100")).toBeNull();
     expect(screen.queryAllByText(/\/100/)).toHaveLength(0);
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Limited history").length).toBeGreaterThan(0);
-    expect(screen.getByText(/has only 1 observation\(s\)/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /still learning this product/i })).toBeTruthy();
+    expect(screen.getByText(/1 observation\(s\) so far/i)).toBeTruthy();
   });
 
   it("idle state prompts to open a supported product page", () => {
     render(<Panel state={{ status: "idle" }} />);
-    expect(screen.getByText(/Open a supported product page on Amazon or Best Buy\./)).toBeTruthy();
+    expect(screen.getAllByText(/Open a supported product page on Amazon or Best Buy\./).length).toBeGreaterThan(0);
   });
 
   it("unsupported state explains, with extra note for no_price", () => {
     render(<Panel state={{ status: "unsupported", retailer: "amazon", reason: "no_price" }} />);
     expect(screen.getByText("This page isn't a supported product page.")).toBeTruthy();
-    expect(
-      screen.getByText("We couldn't read a price on this page, so nothing was recorded."),
-    ).toBeTruthy();
+    expect(screen.getByText(/couldn'?t confidently read a purchase price/i)).toBeTruthy();
+  });
+
+  it("ambiguous state explains without scores", () => {
+    render(
+      <Panel
+        state={{
+          status: "ambiguous",
+          observation: { retailer: "amazon", url: observation.url, title: observation.title },
+          message: "Price looks ambiguous on this page.",
+        }}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: /Price looks ambiguous/i })).toBeTruthy();
+    expect(screen.queryByText(/\/100/)).toBeNull();
   });
 
   it("error state shows message and a Retry button", () => {
@@ -146,13 +158,29 @@ describe("Panel", () => {
           observation,
           message: "Could not reach the service.",
           updatedAt: "",
+          kind: "network",
         }}
-        onRetry={() => (retried = true)}
+        onRetry={() => {
+          retried = true;
+        }}
       />,
     );
     const btn = screen.getByText("Retry");
     expect(btn).toBeTruthy();
     btn.click();
     expect(retried).toBe(true);
+  });
+
+  it("HTML-like titles render as text, not HTML", () => {
+    render(
+      <Panel
+        state={{
+          ...ready,
+          observation: { ...observation, title: "<script>alert(1)</script> Safe Title" },
+        }}
+      />,
+    );
+    expect(screen.getByText("<script>alert(1)</script> Safe Title")).toBeTruthy();
+    expect(document.querySelector("script")).toBeNull();
   });
 });
