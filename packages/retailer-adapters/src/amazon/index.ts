@@ -5,7 +5,7 @@ import {
 } from "@pricetruth/shared";
 import { ADAPTER_VERSION } from "../index.js";
 import type { ExtractionResult, RetailerAdapter } from "../types.js";
-import { AMAZON_SELECTORS as S } from "./selectors.js";
+import { AMAZON_SELECTORS as S, HIDDEN_PRICE_TEXT } from "./selectors.js";
 
 const PATH_ID = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})/;
 
@@ -30,28 +30,77 @@ function extractAsinFromDoc(doc: Document): string | null {
   return null;
 }
 
-function extractPrice(doc: Document, warnings: string[]): number | null {
+/**
+ * Every ASIN the page may legitimately use for its own product: the URL id
+ * plus input#ASIN and #dp[data-asin] — on variant pages the selected child
+ * ASIN differs from the URL's parent ASIN and both are "self".
+ */
+function selfAsins(doc: Document, externalId: string): Set<string> {
+  const set = new Set<string>([externalId]);
+  const input = doc.querySelector<HTMLInputElement>(S.asinInput)?.value?.trim();
+  if (input && /^[A-Z0-9]{10}$/.test(input)) set.add(input);
+  const dp = doc.querySelector(S.dpDataAsin)?.getAttribute("data-asin")?.trim();
+  if (dp && /^[A-Z0-9]{10}$/.test(dp)) set.add(dp);
+  return set;
+}
+
+/**
+ * A price element inside a subtree marked data-asin=<different ASIN> belongs
+ * to a cross-sell/carousel product, not the page's product — reject it.
+ */
+function foreignAsin(el: Element, selfAsins: Set<string>, warnings: string[]): boolean {
+  const asin = el.closest("[data-asin]")?.getAttribute("data-asin")?.trim();
+  if (asin && !selfAsins.has(asin)) {
+    warnings.push(`price element belongs to another ASIN (${asin}); ignored`);
+    return true;
+  }
+  return false;
+}
+
+function extractPrice(
+  doc: Document,
+  warnings: string[],
+  externalId: string,
+  self: Set<string>,
+): number | null {
   for (const sel of S.price) {
-    const el = doc.querySelector(sel);
-    const cents = el ? parsePriceToCents(text(el)) : null;
-    if (cents !== null) return cents;
+    for (const el of doc.querySelectorAll(sel)) {
+      if (foreignAsin(el, self, warnings)) continue;
+      const cents = parsePriceToCents(text(el));
+      if (cents !== null) return cents;
+    }
   }
-  // Split-price fallback: ".a-price-whole" + ".a-price-fraction".
-  const whole = text(doc.querySelector(S.priceWhole)).replace(/[^0-9]/g, "");
-  const fraction = text(doc.querySelector(S.priceFraction)).replace(/[^0-9]/g, "");
-  if (whole) {
-    const cents = parsePriceToCents(`${whole}.${fraction || "00"}`);
-    if (cents !== null) return cents;
+  // Split-price fallback, but only inside a buy-box container — a global
+  // .a-price-whole/.a-price-fraction search leaks carousel prices.
+  for (const boxSel of S.priceContainers) {
+    const box = doc.querySelector(boxSel);
+    if (!box) continue;
+    for (const el of box.querySelectorAll(S.priceWhole)) {
+      if (foreignAsin(el, self, warnings)) continue;
+      const whole = text(el).replace(/[^0-9]/g, "");
+      if (!whole) continue;
+      const fraction = text(
+        el.parentElement?.querySelector(S.priceFraction) ?? box.querySelector(S.priceFraction),
+      ).replace(/[^0-9]/g, "");
+      const cents = parsePriceToCents(`${whole}.${fraction || "00"}`);
+      if (cents !== null) return cents;
+    }
   }
-  warnings.push("no price element matched");
+  if (HIDDEN_PRICE_TEXT.test(text(doc.querySelector(S.hiddenPriceRegions)))) {
+    warnings.push("price hidden until add-to-cart");
+  } else {
+    warnings.push("no price element matched");
+  }
   return null;
 }
 
-function extractReference(doc: Document): number | null {
+function extractReference(doc: Document, warnings: string[], self: Set<string>): number | null {
   for (const sel of S.reference) {
-    const el = doc.querySelector(sel);
-    const cents = el ? parsePriceToCents(text(el)) : null;
-    if (cents !== null) return cents;
+    for (const el of doc.querySelectorAll(sel)) {
+      if (foreignAsin(el, self, warnings)) continue;
+      const cents = parsePriceToCents(text(el));
+      if (cents !== null) return cents;
+    }
   }
   return null;
 }
@@ -123,12 +172,13 @@ export const amazonAdapter: RetailerAdapter = {
       return { ok: false, reason: "no_identifier", warnings };
     }
 
-    const priceCents = extractPrice(doc, warnings);
+    const self = selfAsins(doc, externalId);
+    const priceCents = extractPrice(doc, warnings, externalId, self);
     if (priceCents === null) {
       return { ok: false, reason: "no_price", warnings };
     }
 
-    let referencePriceCents = extractReference(doc) ?? undefined;
+    let referencePriceCents = extractReference(doc, warnings, self) ?? undefined;
     if (referencePriceCents !== undefined && referencePriceCents <= priceCents) {
       warnings.push("reference price not above price; dropped");
       referencePriceCents = undefined;

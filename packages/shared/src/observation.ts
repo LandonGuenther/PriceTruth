@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { RetailerId } from "./retailers.js";
+import { retailerForHostname, type RetailerId } from "./retailers.js";
 
 export const OBSERVATION_SOURCES = {
   EXTENSION_CONTENT_SCRIPT: "extension:content-script",
@@ -111,33 +111,80 @@ export interface RetailerObservation {
   extractorVersion?: string;
 }
 
+const INT32_MAX = 2_147_483_647; // Postgres Int bound, not a business ceiling
+
+/** Per-retailer externalId wire format. */
+export const EXTERNAL_ID_FORMATS: Record<RetailerId, RegExp> = {
+  amazon: /^[A-Z0-9]{10}$/,
+  bestbuy: /^\d{1,12}$/,
+};
+
 export const retailerObservationSchema = z
   .object({
     retailer: z.enum(["amazon", "bestbuy"]),
-    externalId: z.string().trim().min(1),
+    externalId: z.string().trim().min(1).max(64),
     url: z
       .string()
+      .max(2048)
       .url()
       .refine((u) => u.startsWith("http://") || u.startsWith("https://"), {
         message: "url must be an http(s) URL",
       }),
-    title: z.string(),
-    brand: z.string().optional(),
-    modelNumber: z.string().optional(),
-    gtin: z.string().optional(),
-    priceCents: z.number().int().positive(),
-    referencePriceCents: z.number().int().positive().optional(),
+    title: z.string().max(1000),
+    brand: z.string().max(200).optional(),
+    modelNumber: z.string().max(200).optional(),
+    gtin: z
+      .string()
+      .regex(/^\d{8,14}$/, "gtin must be 8-14 digits")
+      .optional(),
+    priceCents: z.number().int().positive().max(INT32_MAX),
+    referencePriceCents: z.number().int().positive().max(INT32_MAX).optional(),
     currency: z.string().regex(/^[A-Z]{3}$/, "currency must be a 3-letter uppercase ISO code"),
     inStock: z.boolean().optional(),
-    variant: z.record(z.string()).optional(),
-    source: z.string().trim().min(1),
+    variant: z
+      .record(z.string().max(64), z.string().max(200))
+      .refine((v) => Object.keys(v).length <= 20, { message: "variant may have at most 20 keys" })
+      .optional(),
+    source: z.string().trim().min(1).max(100),
     observedAt: z.string().datetime(),
     schemaVersion: z.literal(OBSERVATION_SCHEMA_VERSION),
     priceType: priceTypeSchema,
     referenceType: referencePriceTypeSchema.optional(),
-    extractorVersion: z.string().optional(),
+    extractorVersion: z.string().max(32).optional(),
   })
   .superRefine((v, ctx) => {
+    // Retailer-specific wire format + the URL must be on the retailer's host.
+    if (!EXTERNAL_ID_FORMATS[v.retailer].test(v.externalId)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["externalId"],
+        message: `externalId does not match the ${v.retailer} format`,
+      });
+    }
+    let host = "";
+    try {
+      host = new URL(v.url).hostname;
+    } catch {
+      /* the url rule already reports this */
+    }
+    if (host && retailerForHostname(host) !== v.retailer) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["url"],
+        message: `url hostname is not a ${v.retailer} domain`,
+      });
+    }
+    if (
+      v.referencePriceCents !== undefined &&
+      v.priceCents !== undefined &&
+      v.referencePriceCents <= v.priceCents
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referencePriceCents"],
+        message: "referencePriceCents must be greater than priceCents",
+      });
+    }
     if (v.referencePriceCents !== undefined && v.referenceType === undefined) {
       ctx.addIssue({
         code: "custom",

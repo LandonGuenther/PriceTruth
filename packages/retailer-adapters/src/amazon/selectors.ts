@@ -25,9 +25,24 @@ export const AMAZON_SELECTORS = {
     "#priceblock_dealprice",
     "#corePrice_desktop .a-price .a-offscreen",
   ],
+  /**
+   * Buy-box containers that may legitimately hold the product's own price.
+   * The split-price fallback only searches inside one of these; the first
+   * container that yields a price wins.
+   */
+  priceContainers: [
+    "#corePriceDisplay_desktop_feature_div",
+    "#corePrice_feature_div",
+    "#apex_desktop",
+    "#corePrice_desktop",
+    "#buybox",
+    "#desktop_buybox",
+  ],
   /** Split-price fallback: whole and fractional parts rendered separately. */
   priceWhole: ".a-price-whole",
   priceFraction: ".a-price-fraction",
+  /** Page regions whose text is checked for hidden-price messaging. */
+  hiddenPriceRegions: "#dp, #centerCol, #ppd",
   /**
    * Reference ("List Price" / "Typical price") candidates, in priority order.
    * `.basisPrice` holds the strike-through basis price in the core price block.
@@ -53,3 +68,10 @@ export const AMAZON_SELECTORS = {
   /** Variation row labels ("Size", "Color", ...). */
   variationLabel: "label.a-form-label",
 } as const;
+
+/**
+ * Copy Amazon shows instead of a price when the product's price is gated
+ * behind add-to-cart ("To see our price, add this item to your cart.").
+ */
+export const HIDDEN_PRICE_TEXT =
+  /see (?:our )?price in cart|add (?:this item )?to (?:your )?cart to see (?:our )?price|price (?:is )?unavailable|see (?:our )?price[^.]*cart/i;

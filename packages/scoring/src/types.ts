@@ -1,5 +1,5 @@
-/** Price types eligible for history/scoring (retailer-agnostic eligibility). */
-export const ELIGIBLE_PRICE_TYPES = ["STANDARD", "SALE"] as const;
+// Moved to eligibility.ts — re-exported here to avoid churn.
+export { ELIGIBLE_PRICE_TYPES } from "./eligibility.js";
 
 export interface ScoringObservation {
   priceCents: number;

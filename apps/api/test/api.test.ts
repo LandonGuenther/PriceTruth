@@ -11,6 +11,17 @@ import {
   truncateAll,
 } from "./helpers.js";
 import { setObservationStatus } from "../src/services/observationService.js";
+import { corroborateListing } from "../src/services/dataQuality/corroboration.js";
+import { runDailyRollupJob } from "../src/jobs/dailyRollup.js";
+import { exportObservationBatches } from "../src/archive/exporter.js";
+import { LocalFilesystemArchive } from "../src/archive/localFilesystem.js";
+import parquetjs from "@dsnp/parquetjs";
+import { createHash } from "node:crypto";
+import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { collapseToDailySeries } from "@pricetruth/scoring";
+import { linkListing, unlinkListing } from "../src/services/catalogService.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
 
 describeIfDb("api integration", () => {
@@ -51,7 +62,10 @@ describeIfDb("api integration", () => {
     expect(listing).not.toBeNull();
     expect(listing!.title).toBe("Test Widget");
     const idTypes = listing!.product!.identifiers.map((i) => i.type).sort();
-    expect(idTypes).toEqual(["ASIN", "GTIN"]);
+    expect(idTypes).toEqual(["ASIN", "GTIN", "MANUFACTURER_MODEL"]);
+    // ProductIdentifier stores normalized values (GTIN → 14 digits)
+    const gtinRow = listing!.product!.identifiers.find((i) => i.type === "GTIN");
+    expect(gtinRow!.value).toBe("00012345678905");
 
     const obs = await prisma.priceObservation.findFirst({
       where: { listingId: listing!.id },
@@ -179,6 +193,18 @@ describeIfDb("api integration", () => {
       amazonObservation({ source: "mystery:source" }),
       amazonObservation({ referenceType: undefined }),
       { ...amazonObservation(), referencePriceCents: undefined, referenceType: "UNKNOWN" },
+      // M3 validation hardening
+      amazonObservation({ title: "x".repeat(1001) }),
+      amazonObservation({ externalId: "SHORT" }), // amazon requires ^[A-Z0-9]{10}$
+      amazonObservation({ url: "https://www.bestbuy.com/p/6447382" }), // wrong host
+      amazonObservation({ url: "https://evil-amazon.com/dp/B0TESTASIN" }), // suffix trick
+      amazonObservation({ referencePriceCents: 29900 }), // reference must exceed price
+      amazonObservation({ referencePriceCents: 20000 }),
+      amazonObservation({ priceCents: 2_147_483_648 }), // Int32 bound
+      amazonObservation({ gtin: "12x4" }),
+      amazonObservation({
+        variant: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, "v"])),
+      }),
     ];
     for (const payload of cases) {
       const res = await app.inject({ method: "POST", url: "/v1/observations", payload });
@@ -205,6 +231,24 @@ describeIfDb("api integration", () => {
     });
     expect(missing.statusCode).toBe(400);
     expect(missing.json().error).toBe("invalid_observation");
+    await app.close();
+  });
+
+  it("5xx responses are sanitized and payloads over 64KB are rejected", async () => {
+    const app = await makeApp();
+    app.get("/boom", () => {
+      throw new Error("secret connection string details");
+    });
+    const boom = await app.inject({ method: "GET", url: "/boom" });
+    expect(boom.statusCode).toBe(500);
+    expect(boom.json()).toEqual({ error: "internal_error", message: "Internal error" });
+
+    const huge = await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ title: "x".repeat(70 * 1024) }),
+    });
+    expect(huge.statusCode).toBe(413);
     await app.close();
   });
 
@@ -272,7 +316,7 @@ describeIfDb("api integration", () => {
         dataSource: { key: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT },
       },
     });
-    await setObservationStatus(prisma, extObs.id, "EXCLUDED", "test setup");
+    await setObservationStatus(prisma, extObs.id, "EXCLUDED", "test setup", "cli:tester");
 
     const res = await app.inject({
       method: "GET",
@@ -542,15 +586,21 @@ describeIfDb("api integration", () => {
     const newest = await prisma.priceObservation.findFirstOrThrow({
       orderBy: { id: "desc" },
     });
-    await setObservationStatus(prisma, newest.id, "QUARANTINED", "suspicious row");
+    await setObservationStatus(prisma, newest.id, "QUARANTINED", "suspicious row", "cli:tester");
 
     const events = await prisma.observationStatusEvent.findMany({
       where: { observationId: newest.id },
+      orderBy: { id: "asc" },
     });
-    expect(events).toHaveLength(1);
-    expect(events[0]!.fromStatus).toBe("ACCEPTED");
-    expect(events[0]!.toStatus).toBe("QUARANTINED");
-    expect(events[0]!.reason).toBe("suspicious row");
+    expect(events).toHaveLength(2);
+    // insert audit: transient RECEIVED → ACCEPTED
+    expect(events[0]!.fromStatus).toBe("RECEIVED");
+    expect(events[0]!.toStatus).toBe("ACCEPTED");
+    expect(events[0]!.actor).toBe("system:ingest");
+    expect(events[1]!.fromStatus).toBe("ACCEPTED");
+    expect(events[1]!.toStatus).toBe("QUARANTINED");
+    expect(events[1]!.reason).toBe("suspicious row");
+    expect(events[1]!.actor).toBe("cli:tester");
     // status change leaves the fact columns untouched
     expect(newest.priceCents).toBe(29800);
 
@@ -632,5 +682,614 @@ describeIfDb("api integration", () => {
     // status-only update still works
     await prisma.priceObservation.update({ where: { id: obs.id }, data: { status: "EXCLUDED" } });
     await app.close();
+  });
+
+  // ---- catalog identity (M2) -------------------------------------------------
+
+  // GTIN_A is the default gtin on amazonObservation ("0012345678905" → 00012345678905)
+  const GTIN_B = "036000291452"; // valid UPC-A, normalizes to 00036000291452
+
+  const listingOf = async (retailerId: string, externalId: string) =>
+    prisma.listing.findUniqueOrThrow({
+      where: { retailerId_externalId: { retailerId, externalId } },
+    });
+
+  it("same valid GTIN across retailers → shared Product (EXACT auto-link)", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const l1 = await listingOf("amazon", "B0TESTASIN");
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        retailer: "bestbuy",
+        externalId: "7654321",
+        url: "https://www.bestbuy.com/product/x/J3GWRW4HCC/sku/7654321",
+      }),
+    });
+    const l2 = await listingOf("bestbuy", "7654321");
+    expect(l2.productId).toBe(l1.productId);
+
+    const ev = await prisma.matchEvidence.findMany({ where: { listingId: l2.id } });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.level).toBe("EXACT");
+    expect(ev[0]!.candidateProductId).toBe(l1.productId);
+    expect(ev[0]!.engineVersion).toBe("1.0.0");
+
+    const link = await prisma.productLinkEvent.findFirstOrThrow({
+      where: { listingId: l2.id, action: "LINK" },
+    });
+    expect(link.actor).toBe("auto:match-engine@1.0.0");
+    // the linked product gained the new listing's identifiers
+    const ids = await prisma.productIdentifier.findMany({
+      where: { productId: l1.productId! },
+    });
+    expect(ids.map((i) => i.type).sort()).toContainEqual("BESTBUY_SKU");
+    await app.close();
+  });
+
+  it("no shared identifiers → separate products, UNRESOLVED evidence", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        externalId: "B0OTHERXX1",
+        url: "https://www.amazon.com/dp/B0OTHERXX1",
+        gtin: GTIN_B,
+        modelNumber: "OTHER-9",
+      }),
+    });
+    const l1 = await listingOf("amazon", "B0TESTASIN");
+    const l2 = await listingOf("amazon", "B0OTHERXX1");
+    expect(l2.productId).not.toBe(l1.productId);
+    const ev = await prisma.matchEvidence.findMany({ where: { listingId: l2.id } });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.level).toBe("UNRESOLVED");
+    await app.close();
+  });
+
+  it("GTIN → product A, brand+model → product B → CONFLICT, own product", async () => {
+    const app = await makeApp();
+    // A: amazon listing asserting GTIN_A
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const a = await listingOf("amazon", "B0TESTASIN");
+    // B: bestbuy listing asserting brand+model only
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        retailer: "bestbuy",
+        externalId: "7654321",
+        url: "https://www.bestbuy.com/product/x/J3GWRW4HCC/sku/7654321",
+        gtin: undefined,
+        brand: "Sony",
+        modelNumber: "WH-1000XM6",
+        title: "Sony Headphones",
+      }),
+    });
+    const b = await listingOf("bestbuy", "7654321");
+    expect(b.productId).not.toBe(a.productId);
+    // C: asserts both GTIN_A and Sony/WH-1000XM6 → conflict
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        externalId: "B0CONFLCT0",
+        url: "https://www.amazon.com/dp/B0CONFLCT0",
+        brand: "Sony",
+        modelNumber: "WH-1000XM6",
+        title: "Sony Headphones",
+      }),
+    });
+    const c = await listingOf("amazon", "B0CONFLCT0");
+    expect(c.productId).not.toBe(a.productId);
+    expect(c.productId).not.toBe(b.productId);
+    const ev = await prisma.matchEvidence.findMany({ where: { listingId: c.id } });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.level).toBe("CONFLICT");
+    expect(ev[0]!.candidateProductId).toBeNull();
+    await app.close();
+  });
+
+  it("linkListing/unlinkListing write ProductLinkEvent rows", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const listing = await listingOf("amazon", "B0TESTASIN");
+    const original = listing.productId;
+
+    const target = await prisma.product.create({
+      data: { title: "Canonical", brand: "Acme" },
+    });
+    await linkListing(prisma, {
+      listingId: listing.id,
+      productId: target.id,
+      reason: "same product",
+      actor: "cli:tester",
+    });
+    expect((await listingOf("amazon", "B0TESTASIN")).productId).toBe(target.id);
+
+    await unlinkListing(prisma, {
+      listingId: listing.id,
+      reason: "wrong product",
+      actor: "cli:tester",
+    });
+    const after = await listingOf("amazon", "B0TESTASIN");
+    expect(after.productId).not.toBe(target.id);
+    expect(after.productId).not.toBe(original);
+
+    const events = await prisma.productLinkEvent.findMany({
+      where: { listingId: listing.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(events.map((e) => e.action)).toEqual(["LINK", "UNLINK"]);
+    expect(events[0]!.previousProductId).toBe(original);
+    expect(events[0]!.newProductId).toBe(target.id);
+    expect(events[1]!.previousProductId).toBe(target.id);
+    expect(events[1]!.newProductId).toBe(after.productId);
+    expect(events.every((e) => e.actor === "cli:tester")).toBe(true);
+    await app.close();
+  });
+
+  it("new assertion on an existing listing records evidence but never relinks", async () => {
+    const app = await makeApp();
+    // no GTIN on the first sighting so the original product isn't a candidate
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ gtin: undefined }),
+    });
+    const listing = await listingOf("amazon", "B0TESTASIN");
+    const originalProduct = listing.productId;
+
+    // another product holding GTIN_B
+    const other = await prisma.product.create({
+      data: { title: "Other", identifiers: { create: { type: "GTIN", value: "00036000291452" } } },
+    });
+
+    // second sighting asserts a new GTIN (different value → new assertion)
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      // different brand keeps the persisted AC-1 assertion a weak model_only
+      // match against the original product (otherwise it would CONFLICT)
+      payload: amazonObservation({
+        priceCents: 28800,
+        gtin: GTIN_B,
+        modelNumber: "X-2",
+        brand: "Sony",
+      }),
+    });
+    const after = await listingOf("amazon", "B0TESTASIN");
+    expect(after.productId).toBe(originalProduct); // never auto-relinked
+    const ev = await prisma.matchEvidence.findMany({
+      where: { listingId: listing.id },
+      orderBy: { evaluatedAt: "asc" },
+    });
+    expect(ev.length).toBe(2); // creation evidence + re-evaluation
+    expect(ev[1]!.level).toBe("EXACT");
+    expect(ev[1]!.candidateProductId).toBe(other.id);
+    await app.close();
+  });
+
+  it("invalid identifiers are asserted but never become ProductIdentifiers", async () => {
+    const app = await makeApp();
+    // bad check digit → valid: false on the GTIN assertion
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ gtin: "12345678901234" }),
+    });
+    const listing = await listingOf("amazon", "B0TESTASIN");
+    const gtinAssertion = await prisma.identifierAssertion.findFirstOrThrow({
+      where: { listingId: listing.id, type: "GTIN" },
+    });
+    expect(gtinAssertion.valid).toBe(false);
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: listing.productId! },
+      include: { identifiers: true },
+    });
+    expect(product.identifiers.map((i) => i.type).sort()).toEqual(["ASIN", "MANUFACTURER_MODEL"]);
+    await app.close();
+  });
+
+  const postN = async (app: Awaited<ReturnType<typeof makeApp>>, n: number, cents: number) => {
+    for (let i = 0; i < n; i++) {
+      await app.inject({
+        method: "POST",
+        url: "/v1/observations",
+        payload: amazonObservation({
+          priceCents: cents + i * 10,
+          referencePriceCents: undefined,
+          referenceType: undefined,
+        }),
+      });
+    }
+  };
+
+  it("QUARANTINED self-heals to CORROBORATED via a second source; EXCLUDED untouched", async () => {
+    const app = await makeApp();
+    // 5 tightly clustered rows at ~$999
+    await postN(app, 5, 99900);
+    // The suspicious $599 drop: >25% off a tight cluster → QUARANTINED
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    const quarantined = await prisma.priceObservation.findFirstOrThrow({
+      where: { priceCents: 59900 },
+    });
+    expect(quarantined.status).toBe("QUARANTINED");
+    const events = await prisma.observationStatusEvent.findMany({
+      where: { observationId: quarantined.id },
+    });
+    expect(events[0]!.fromStatus).toBe("RECEIVED");
+    expect(events[0]!.toStatus).toBe("QUARANTINED");
+    expect(events[0]!.actor).toContain("system:anomaly@");
+    expect(events[0]!.reason).toContain("contradicts_recent_cluster");
+
+    const listing = await prisma.listing.findFirstOrThrow();
+    // EXCLUDED rows are never touched by corroboration
+    await setObservationStatus(prisma, quarantined.id, "EXCLUDED", "op decision", "cli:tester");
+    await corroborateListing(prisma, listing.id, new Date());
+    expect(
+      (await prisma.priceObservation.findUniqueOrThrow({ where: { id: quarantined.id } })).status,
+    ).toBe("EXCLUDED");
+    await setObservationStatus(prisma, quarantined.id, "QUARANTINED", "restore", "cli:tester");
+
+    // A second $599 from a different DataSource corroborates it.
+    await prisma.priceObservation.create({
+      data: {
+        listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.MANUAL),
+        priceCents: 59900,
+        priceType: "STANDARD",
+        currency: "USD",
+        effectiveAt: new Date(),
+        schemaVersion: 1,
+        synthetic: false,
+      },
+    });
+    // any ingest re-runs the corroboration pass (a duplicate still triggers it)
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    expect(
+      (await prisma.priceObservation.findUniqueOrThrow({ where: { id: quarantined.id } })).status,
+    ).toBe("CORROBORATED");
+    const manual = await prisma.priceObservation.findFirstOrThrow({
+      where: { dataSource: { key: OBSERVATION_SOURCES.MANUAL } },
+    });
+    expect(manual.status).toBe("CORROBORATED");
+
+    // analysis now includes the corroborated $599 rows
+    const analysis = (
+      await app.inject({ method: "GET", url: "/v1/listings/amazon/B0TESTASIN/analysis" })
+    ).json();
+    expect(analysis.currentPriceCents).toBe(59900);
+    // 5 cluster rows (ACCEPTED) + client 599 + manual 599 (CORROBORATED)
+    expect(analysis.evidence.eligibleCount).toBe(7);
+    await app.close();
+  });
+
+  it("quarantined rows are stored but excluded from history/analysis; evidence summarizes", async () => {
+    const app = await makeApp();
+    await postN(app, 5, 99900);
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    expect(await prisma.priceObservation.count()).toBe(6); // never dropped
+
+    const analysis = (
+      await app.inject({ method: "GET", url: "/v1/listings/amazon/B0TESTASIN/analysis" })
+    ).json();
+    expect(analysis.evidence).toEqual({
+      eligibleCount: 5,
+      excluded: { synthetic: 0, quarantined: 1, excluded: 0, priceType: 0 },
+    });
+    const history = (
+      await app.inject({ method: "GET", url: "/v1/listings/amazon/B0TESTASIN/history" })
+    ).json();
+    expect(history.points).toHaveLength(5);
+    expect(history.points.every((p: { priceCents: number }) => p.priceCents !== 59900)).toBe(true);
+    await app.close();
+  });
+
+  it("same-source same-day rows do not corroborate", async () => {
+    const app = await makeApp();
+    await postN(app, 5, 99900);
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    const q = await prisma.priceObservation.findFirstOrThrow({
+      where: { priceCents: 59900, status: "QUARANTINED" },
+    });
+    const listing = await prisma.listing.findFirstOrThrow();
+    // second $599 from the SAME source on the same UTC day — not a corroborator
+    const sameSource = await prisma.priceObservation.create({
+      data: {
+        listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT),
+        priceCents: 59900,
+        priceType: "STANDARD",
+        currency: "USD",
+        effectiveAt: new Date(),
+        schemaVersion: 1,
+        synthetic: false,
+      },
+    });
+    await corroborateListing(prisma, listing.id, new Date());
+    expect((await prisma.priceObservation.findUniqueOrThrow({ where: { id: q.id } })).status).toBe(
+      "QUARANTINED",
+    );
+    expect(
+      (await prisma.priceObservation.findUniqueOrThrow({ where: { id: sameSource.id } })).status,
+    ).toBe("ACCEPTED");
+    await app.close();
+  });
+
+  // ---- daily rollup (M4) ---------------------------------------------------
+
+  const seedRawObs = async (
+    listingId: string,
+    rows: Array<{ priceCents: number; effectiveAt: Date; referencePriceCents?: number }>,
+    status: "ACCEPTED" | "QUARANTINED" = "ACCEPTED",
+  ) => {
+    const dsId = await dataSourceId(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+    for (const r of rows) {
+      await prisma.priceObservation.create({
+        data: {
+          listingId,
+          dataSourceId: dsId,
+          priceCents: r.priceCents,
+          priceType: "STANDARD",
+          referencePriceCents: r.referencePriceCents ?? null,
+          referenceType: r.referencePriceCents === undefined ? null : "UNKNOWN",
+          currency: "USD",
+          effectiveAt: r.effectiveAt,
+          status,
+          schemaVersion: 1,
+          synthetic: false,
+        },
+      });
+    }
+  };
+
+  const day0 = "2026-09-08";
+  const day1 = "2026-09-09";
+
+  it("daily rollup: deterministic, equals collapseToDailySeries, restartable, re-rolls on status flip", async () => {
+    await prisma.retailer.upsert({
+      where: { id: "amazon" },
+      update: {},
+      create: { id: "amazon", displayName: "Amazon" },
+    });
+    const listing = await prisma.listing.create({
+      data: {
+        retailerId: "amazon",
+        externalId: "B0ROLLUP01",
+        url: "https://www.amazon.com/dp/B0ROLLUP01",
+        title: "Rollup Widget",
+      },
+    });
+    const t = (day: string, hh = 12) => new Date(`${day}T${String(hh).padStart(2, "0")}:00:00Z`);
+    await seedRawObs(listing.id, [
+      { priceCents: 10000, effectiveAt: t(day0, 8), referencePriceCents: 12000 },
+      { priceCents: 11000, effectiveAt: t(day0, 12) },
+      { priceCents: 12000, effectiveAt: t(day0, 16) },
+      { priceCents: 20000, effectiveAt: t(day1, 9) },
+      { priceCents: 21000, effectiveAt: t(day1, 15), referencePriceCents: 25000 },
+      // quarantined row must not contribute
+    ]);
+    await seedRawObs(listing.id, [{ priceCents: 500, effectiveAt: t(day1, 20) }], "QUARANTINED");
+
+    const r1 = await runDailyRollupJob(prisma);
+    expect(r1.rolledDays).toBe(2);
+    const rows1 = await prisma.listingDailyPrice.findMany({
+      where: { listingId: listing.id },
+      orderBy: { day: "asc" },
+    });
+    expect(rows1).toHaveLength(2);
+    expect(rows1[0]!.medianCents).toBe(11000);
+    expect(rows1[0]!.lowCents).toBe(10000);
+    expect(rows1[0]!.highCents).toBe(12000);
+    expect(rows1[0]!.firstCents).toBe(10000);
+    expect(rows1[0]!.lastCents).toBe(12000);
+    expect(rows1[0]!.eligibleObservationCount).toBe(3);
+    expect(rows1[0]!.sourceCount).toBe(1);
+    expect(rows1[0]!.referenceMedianCents).toBe(12000);
+    expect(rows1[1]!.medianCents).toBe(20500); // median(20000,21000); the 500 is out
+    expect(rows1[1]!.referenceMedianCents).toBe(25000);
+
+    // medians equal collapseToDailySeries on the eligible rows
+    const eligible = await prisma.priceObservation.findMany({
+      where: { listingId: listing.id, status: { in: ["ACCEPTED", "CORROBORATED"] } },
+      select: { priceCents: true, effectiveAt: true, referencePriceCents: true },
+      orderBy: { effectiveAt: "asc" },
+    });
+    const daily = collapseToDailySeries(
+      eligible.map((o) => ({
+        priceCents: o.priceCents,
+        referencePriceCents: o.referencePriceCents,
+        effectiveAt: o.effectiveAt.toISOString(),
+        sourceKey: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
+      })),
+    );
+    expect(rows1.map((r) => [r.day.toISOString().slice(0, 10), r.medianCents])).toEqual(
+      daily.map((d) => [d.day, d.medianPriceCents]),
+    );
+
+    // rerun with nothing new → identical rows (idempotent)
+    const r2 = await runDailyRollupJob(prisma);
+    expect(r2.rolledDays).toBe(0);
+    const rows2 = await prisma.listingDailyPrice.findMany({
+      where: { listingId: listing.id },
+      orderBy: { day: "asc" },
+    });
+    expect(rows2).toEqual(rows1);
+
+    // interrupted run: force checkpoint back to mid-stream, rerun completes
+    const firstObs = await prisma.priceObservation.findFirstOrThrow({
+      where: { listingId: listing.id },
+      orderBy: { id: "asc" },
+    });
+    await prisma.jobCheckpoint.update({
+      where: { jobName: "rollup:observations" },
+      data: { cursor: firstObs.id.toString() },
+    });
+    await runDailyRollupJob(prisma, { batchSize: 1 });
+    const rows3 = await prisma.listingDailyPrice.findMany({
+      where: { listingId: listing.id },
+      orderBy: { day: "asc" },
+    });
+    expect(rows3.map((r) => r.medianCents)).toEqual(rows1.map((r) => r.medianCents));
+
+    // status flip re-rolls the affected day via the event cursor
+    const quarantined = await prisma.priceObservation.findFirstOrThrow({
+      where: { listingId: listing.id, status: "QUARANTINED" },
+    });
+    await setObservationStatus(prisma, quarantined.id, "ACCEPTED", "manual ok", "cli:tester");
+    await runDailyRollupJob(prisma);
+    const after = await prisma.listingDailyPrice.findUniqueOrThrow({
+      where: { listingId_day: { listingId: listing.id, day: new Date(`${day1}T00:00:00Z`) } },
+    });
+    expect(after.eligibleObservationCount).toBe(3);
+    expect(after.medianCents).toBe(20000); // median(500,20000,21000) = 20000
+  });
+
+  // ---- archive export (M5) ---------------------------------------------------
+
+  it("archive export → manifest sha256, parquet read-back equality, idempotent rerun", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pt-archive-"));
+    const archive = new LocalFilesystemArchive(dir);
+
+    await prisma.retailer.upsert({
+      where: { id: "amazon" },
+      update: {},
+      create: { id: "amazon", displayName: "Amazon" },
+    });
+    const listing = await prisma.listing.create({
+      data: {
+        retailerId: "amazon",
+        externalId: "B0ARCHIVE1",
+        url: "https://www.amazon.com/dp/B0ARCHIVE1",
+        title: "Archive Widget",
+      },
+    });
+    const dsId = await dataSourceId(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+    const N = 5;
+    const stored: bigint[] = [];
+    for (let i = 0; i < N; i++) {
+      const row = await prisma.priceObservation.create({
+        data: {
+          listingId: listing.id,
+          dataSourceId: dsId,
+          priceCents: 1000 + i * 100,
+          priceType: "STANDARD",
+          currency: "USD",
+          effectiveAt: new Date(Date.parse("2026-09-09T12:00:00Z") + i * 3600_000),
+          receivedAt: new Date(Date.parse("2026-09-09T12:00:00Z") + i * 3600_000),
+          status: "ACCEPTED",
+          schemaVersion: 1,
+          synthetic: true,
+        },
+      });
+      stored.push(row.id);
+    }
+
+    const r1 = await exportObservationBatches(prisma, archive, { destination: dir });
+    expect(r1.batches).toBe(1);
+    expect(r1.rows).toBe(N);
+    const key = r1.writtenKeys[0]!;
+    expect(key).toMatch(
+      /^schema=v1\/retailer=amazon\/year=2026\/month=09\/day=09\/part-\d+-\d+\.parquet$/,
+    );
+
+    // manifest checks + sha256 of the file
+    const manifest = JSON.parse(
+      Buffer.from(await archive.getObject(key.replace(/\.parquet$/, ".manifest.json"))).toString(),
+    );
+    const bytes = await archive.getObject(key);
+    const fileHash = createHash("sha256").update(bytes).digest("hex");
+    expect(manifest.sha256).toBe(fileHash);
+    expect(manifest.rowCount).toBe(N);
+    expect(manifest.schemaVersion).toBe(1);
+    expect(manifest.firstObservationId).toBe(stored[0]!.toString());
+    expect(manifest.lastObservationId).toBe(stored[N - 1]!.toString());
+
+    // ledger row
+    const ledger = await prisma.archiveBatch.findUniqueOrThrow({ where: { key } });
+    expect(ledger.sha256).toBe(fileHash);
+    expect(ledger.rowCount).toBe(N);
+
+    // parquet read-back: field equality for all rows
+    const reader = await parquetjs.ParquetReader.openBuffer(Buffer.from(bytes));
+    const cursor = reader.getCursor();
+    const back: Record<string, unknown>[] = [];
+    let rec;
+    while ((rec = await cursor.next())) back.push(rec as Record<string, unknown>);
+    await reader.close();
+    expect(back).toHaveLength(N);
+    const orig = await prisma.priceObservation.findMany({ orderBy: { id: "asc" } });
+    for (let i = 0; i < N; i++) {
+      expect(BigInt(back[i]!.id as bigint)).toBe(orig[i]!.id);
+      expect(back[i]!.listingId).toBe(orig[i]!.listingId);
+      expect(back[i]!.priceCents).toBe(orig[i]!.priceCents);
+      expect((back[i]!.effectiveAt as Date).getTime()).toBe(orig[i]!.effectiveAt.getTime());
+      expect((back[i]!.receivedAt as Date).getTime()).toBe(orig[i]!.receivedAt.getTime());
+      expect(back[i]!.dataSourceKey).toBe(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+      expect(back[i]).not.toHaveProperty("status"); // immutable facts only
+    }
+
+    // rerun: checkpoint advanced → no new files anywhere
+    const listingFiles = async (d: string): Promise<string[]> => {
+      const out: string[] = [];
+      const walk = async (x: string) => {
+        for (const e of await readdir(x, { withFileTypes: true })) {
+          const f = path.join(x, e.name);
+          if (e.isDirectory()) await walk(f);
+          else out.push(f);
+        }
+      };
+      await walk(d);
+      return out;
+    };
+    const filesBefore = await listingFiles(dir);
+    const r2 = await exportObservationBatches(prisma, archive, { destination: dir });
+    expect(r2.batches).toBe(0);
+    expect(await listingFiles(dir)).toEqual(filesBefore);
+
+    // idempotent batch semantics: same key + same sha256 → skipped, not rewritten
+    const manifestText = await readFile(
+      path.join(dir, key.replace(/\.parquet$/, ".manifest.json")),
+      "utf8",
+    );
+    expect(manifestText).toContain(fileHash);
+    console.log("ARCHIVE_DIR", dir);
   });
 });

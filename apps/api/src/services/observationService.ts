@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  Prisma,
   type ObservationStatus,
   type PrismaClient,
   type PriceType as PrismaPriceType,
@@ -13,16 +12,24 @@ import {
   type ReferencePriceType,
   type RetailerObservation,
 } from "@pricetruth/shared";
+import { ELIGIBLE_PRICE_TYPES, ELIGIBLE_STATUSES } from "@pricetruth/scoring";
 import type { AppConfig } from "../config.js";
 import { fetchBestBuyProduct, type FetchLike } from "./bestbuyApi.js";
+import {
+  identifyNewListing,
+  listingAssertionInputs,
+  reevaluateListing,
+  upsertAssertions,
+} from "./catalogService.js";
+import { ANOMALY_ENGINE_VERSION, evaluateAnomaly } from "./dataQuality/anomaly.js";
+import { corroborateListing } from "./dataQuality/corroboration.js";
 import { resolveObservationTime } from "./timePolicy.js";
 
 const DEDUP_WINDOW_MS = 60 * 60 * 1000;
-
-const IDENTIFIER_TYPE: Record<string, "ASIN" | "BESTBUY_SKU"> = {
-  amazon: "ASIN",
-  bestbuy: "BESTBUY_SKU",
-};
+const ANOMALY_WINDOW_MS = 30 * 86_400_000;
+const ANOMALY_CONTEXT_LIMIT = 20;
+const INGEST_ACTOR = "system:ingest";
+const ANOMALY_ACTOR = `system:anomaly@${ANOMALY_ENGINE_VERSION}`;
 
 // Type-level proof that the shared literals and the Prisma enums are identical.
 const priceTypeMap = {
@@ -63,6 +70,7 @@ export interface IngestResult {
 async function upsertListing(
   prisma: PrismaClient,
   obs: RetailerObservation,
+  dataSourceId: string,
 ): Promise<{ id: string }> {
   const retailerId = obs.retailer;
   await prisma.retailer.upsert({
@@ -74,11 +82,13 @@ async function upsertListing(
   const key = { retailerId, externalId: obs.externalId };
   const existing = await prisma.listing.findUnique({
     where: { retailerId_externalId: key },
-    select: { id: true },
+    select: { id: true, title: true, brand: true },
   });
+  const assertionItems = listingAssertionInputs(obs);
+
   if (existing) {
     // Listing metadata may be refreshed to the newest observed values.
-    await prisma.listing.update({
+    const updated = await prisma.listing.update({
       where: { id: existing.id },
       data: {
         url: obs.url,
@@ -87,31 +97,23 @@ async function upsertListing(
         modelNumber: obs.modelNumber ?? null,
         gtin: obs.gtin ?? null,
       },
+      select: { id: true, title: true, brand: true },
     });
-    return existing;
-  }
-
-  // MVP: create a Product 1:1 per new Listing (no cross-retailer merging yet).
-  const product = await prisma.product.create({
-    data: { title: obs.title, brand: obs.brand ?? null, modelNumber: obs.modelNumber ?? null },
-  });
-
-  const identifiers: Prisma.ProductIdentifierCreateManyInput[] = [
-    { productId: product.id, type: IDENTIFIER_TYPE[retailerId] ?? "MPN", value: obs.externalId },
-  ];
-  if (obs.gtin) {
-    // A GTIN may already belong to another product — on conflict, skip linking.
-    const conflict = await prisma.productIdentifier.findUnique({
-      where: { type_value: { type: "GTIN", value: obs.gtin } },
-      select: { id: true },
-    });
-    if (!conflict) {
-      identifiers.push({ productId: product.id, type: "GTIN", value: obs.gtin });
+    const { identifiers, addedNew } = await upsertAssertions(
+      prisma,
+      existing.id,
+      assertionItems,
+      dataSourceId,
+    );
+    // New identifier evidence re-runs the match for the audit log, but an
+    // already-linked listing is never auto-relinked.
+    if (addedNew) {
+      await reevaluateListing(prisma, updated, identifiers);
     }
+    return { id: existing.id };
   }
-  await prisma.productIdentifier.createMany({ data: identifiers });
 
-  return prisma.listing.create({
+  const listing = await prisma.listing.create({
     data: {
       retailerId,
       externalId: obs.externalId,
@@ -120,10 +122,14 @@ async function upsertListing(
       brand: obs.brand ?? null,
       modelNumber: obs.modelNumber ?? null,
       gtin: obs.gtin ?? null,
-      productId: product.id,
     },
-    select: { id: true },
+    select: { id: true, title: true, brand: true, modelNumber: true },
   });
+
+  // Assertions first, then the match engine decides the product link.
+  const { identifiers } = await upsertAssertions(prisma, listing.id, assertionItems, dataSourceId);
+  await identifyNewListing(prisma, listing, identifiers);
+  return { id: listing.id };
 }
 
 /** Canonical JSON fingerprint: sha256 of entries sorted by key. */
@@ -194,29 +200,68 @@ async function insertObservation(
   listingId: string,
   fields: ObservationFields,
   meta: { clientVersion: string | null },
+  initial: { status: "ACCEPTED" | "QUARANTINED"; actor: string; reason: string } = {
+    status: "ACCEPTED",
+    actor: INGEST_ACTOR,
+    reason: "accepted",
+  },
 ) {
-  return prisma.priceObservation.create({
-    data: {
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.priceObservation.create({
+      data: {
+        listingId,
+        variantId: fields.variantId,
+        dataSourceId: fields.dataSourceId,
+        priceCents: fields.priceCents,
+        priceType: priceTypeMap[fields.priceType],
+        referencePriceCents: fields.referencePriceCents,
+        referenceType:
+          fields.referenceType === null ? null : referenceTypeMap[fields.referenceType],
+        currency: fields.currency,
+        inStock: fields.inStock,
+        receivedAt: fields.receivedAt,
+        clientObservedAt: fields.clientObservedAt,
+        effectiveAt: fields.effectiveAt,
+        clientSkewSeconds: fields.clientSkewSeconds,
+        status: initial.status,
+        synthetic: fields.synthetic,
+        schemaVersion: fields.schemaVersion,
+        clientVersion: meta.clientVersion,
+        extractorVersion: fields.extractorVersion,
+      },
+      select: { id: true },
+    });
+    // Every insert is audited: RECEIVED is transient and only ever appears as
+    // fromStatus on this first event.
+    await tx.observationStatusEvent.create({
+      data: {
+        observationId: created.id,
+        fromStatus: "RECEIVED",
+        toStatus: initial.status,
+        reason: initial.reason,
+        actor: initial.actor,
+      },
+    });
+    return created;
+  });
+}
+
+/** Recent eligible context rows for the anomaly engine (newest first). */
+async function anomalyContext(prisma: PrismaClient, listingId: string, effectiveAt: Date) {
+  return prisma.priceObservation.findMany({
+    where: {
       listingId,
-      variantId: fields.variantId,
-      dataSourceId: fields.dataSourceId,
-      priceCents: fields.priceCents,
-      priceType: priceTypeMap[fields.priceType],
-      referencePriceCents: fields.referencePriceCents,
-      referenceType: fields.referenceType === null ? null : referenceTypeMap[fields.referenceType],
-      currency: fields.currency,
-      inStock: fields.inStock,
-      receivedAt: fields.receivedAt,
-      clientObservedAt: fields.clientObservedAt,
-      effectiveAt: fields.effectiveAt,
-      clientSkewSeconds: fields.clientSkewSeconds,
-      status: "ACCEPTED",
-      synthetic: fields.synthetic,
-      schemaVersion: fields.schemaVersion,
-      clientVersion: meta.clientVersion,
-      extractorVersion: fields.extractorVersion,
+      synthetic: false,
+      status: { in: [...ELIGIBLE_STATUSES] },
+      priceType: { in: [...ELIGIBLE_PRICE_TYPES] },
+      effectiveAt: {
+        gte: new Date(effectiveAt.getTime() - ANOMALY_WINDOW_MS),
+        lt: effectiveAt,
+      },
     },
-    select: { id: true },
+    orderBy: { effectiveAt: "desc" },
+    take: ANOMALY_CONTEXT_LIMIT,
+    select: { priceCents: true, currency: true, effectiveAt: true },
   });
 }
 
@@ -247,7 +292,7 @@ export async function ingestObservation(
   if (resolved.rejectReason) throw new ObservationRejected(resolved.rejectReason);
   const { effectiveAt, clientSkewSeconds } = resolved;
 
-  const listing = await upsertListing(prisma, obs);
+  const listing = await upsertListing(prisma, obs, dataSource.id);
 
   const variantId =
     obs.variant && Object.keys(obs.variant).length > 0
@@ -279,11 +324,36 @@ export async function ingestObservation(
     observationId = existing.id;
     accepted = false;
   } else {
-    observationId = (await insertObservation(prisma, listing.id, fields, meta)).id;
+    // Anomaly check runs against recent eligible history; quarantined rows are
+    // still inserted (never dropped) with the reasons on the status event.
+    const context = await anomalyContext(prisma, listing.id, effectiveAt);
+    const verdict = evaluateAnomaly(
+      {
+        priceCents: fields.priceCents,
+        currency: fields.currency,
+        trustClass: dataSource.trustClass,
+        effectiveAt,
+      },
+      context,
+    );
+    const created = await insertObservation(
+      prisma,
+      listing.id,
+      fields,
+      meta,
+      verdict.verdict === "QUARANTINE"
+        ? { status: "QUARANTINED", actor: ANOMALY_ACTOR, reason: verdict.reasons.join(",") }
+        : { status: "ACCEPTED", actor: INGEST_ACTOR, reason: "accepted" },
+    );
+    observationId = created.id;
     accepted = true;
   }
 
   const enrichment = await maybeEnrichBestBuy(prisma, config, listing.id, obs, fetchImpl);
+
+  // Corroboration pass for the listing: QUARANTINED self-heals once a second
+  // day/source agrees; idempotent, cheap, no queue.
+  await corroborateListing(prisma, listing.id, new Date());
 
   return {
     accepted,
@@ -371,6 +441,7 @@ export async function setObservationStatus(
   observationId: bigint,
   toStatus: ObservationStatus,
   reason: string,
+  actor: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const current = await tx.priceObservation.findUniqueOrThrow({
@@ -383,7 +454,7 @@ export async function setObservationStatus(
       data: { status: toStatus },
     });
     await tx.observationStatusEvent.create({
-      data: { observationId, fromStatus: current.status, toStatus, reason },
+      data: { observationId, fromStatus: current.status, toStatus, reason, actor },
     });
   });
 }

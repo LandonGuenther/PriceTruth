@@ -3,8 +3,8 @@ import { OBSERVATION_SOURCES, retailerObservationSchema } from "./observation.js
 
 const valid = {
   retailer: "amazon",
-  externalId: "B0ABC123",
-  url: "https://www.amazon.com/dp/B0ABC123",
+  externalId: "B0ABC12345",
+  url: "https://www.amazon.com/dp/B0ABC12345",
   title: "Example product",
   priceCents: 29900,
   referencePriceCents: 49900,
@@ -47,5 +47,51 @@ describe("retailerObservationSchema", () => {
     expect(() => retailerObservationSchema.parse({ ...noRef, referenceType: "UNKNOWN" })).toThrow();
     expect(() => retailerObservationSchema.parse({ ...valid, referenceType: undefined })).toThrow();
     expect(retailerObservationSchema.parse(noRef).priceCents).toBe(29900);
+  });
+
+  it("enforces per-retailer externalId format and hostname", () => {
+    expect(() => retailerObservationSchema.parse({ ...valid, externalId: "SHORT" })).toThrow();
+    expect(() =>
+      retailerObservationSchema.parse({
+        ...valid,
+        externalId: "123456",
+        url: "https://www.bestbuy.com/p",
+      }),
+    ).toThrow(); // bestbuy URL on an amazon observation
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, url: "https://evil-amazon.com/dp/B0ABC12345" }),
+    ).toThrow(); // hostname suffix trick
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, url: "https://smile.amazon.com/dp/B0ABC12345" }),
+    ).not.toThrow();
+  });
+
+  it("enforces length/count bounds and Int32 price limits", () => {
+    expect(() => retailerObservationSchema.parse({ ...valid, title: "x".repeat(1001) })).toThrow();
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, priceCents: 2_147_483_648 }),
+    ).toThrow();
+    expect(() =>
+      retailerObservationSchema.parse({
+        ...valid,
+        variant: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, "v"])),
+      }),
+    ).toThrow();
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, variant: { ["k".repeat(65)]: "v" } }),
+    ).toThrow();
+    expect(() => retailerObservationSchema.parse({ ...valid, gtin: "12x4" })).toThrow();
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, extractorVersion: "v".repeat(33) }),
+    ).toThrow();
+  });
+
+  it("requires referencePriceCents > priceCents", () => {
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, referencePriceCents: 29900 }),
+    ).toThrow();
+    expect(() =>
+      retailerObservationSchema.parse({ ...valid, referencePriceCents: 20000 }),
+    ).toThrow();
   });
 });

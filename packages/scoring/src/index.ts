@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./eligibility.js";
 export * from "./daily.js";
 export * from "./stats.js";
 export * from "./confidence.js";

@@ -1,0 +1,23 @@
+<!--
+  Variant page: URL carries the parent ASIN while #dp[data-asin] and
+  input#ASIN carry the selected child ASIN. The buy-box price lives inside
+  #dp — it must be treated as self, not rejected as foreign.
+  NOT a captured page.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0CHILD001">
+      <input id="ASIN" type="hidden" value="B0CHILD001" />
+      <span id="productTitle">Acme Widget, Size M</span>
+      <div id="corePrice_feature_div">
+        <span class="a-price">
+          <span class="a-offscreen">$59.00</span>
+          <span class="a-price-whole">59<span class="a-price-decimal">.</span></span>
+          <span class="a-price-fraction">00</span>
+        </span>
+      </div>
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>

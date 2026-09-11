@@ -12,6 +12,10 @@
     "format:check": "prettier --check .",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
+    "catalog": "tsx scripts/catalog.ts",
+    "jobs": "tsx scripts/jobs.ts",
+    "loadgen": "tsx scripts/loadgen.ts",
+    "bench": "tsx scripts/bench.ts",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"
   },
@@ -19,8 +23,10 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@dsnp/parquetjs": "1.8.9",
     "@fastify/cors": "^10.0.1",
     "@fastify/rate-limit": "^10.1.1",
+    "@pricetruth/catalog": "workspace:*",
     "@pricetruth/scoring": "workspace:*",
     "@pricetruth/shared": "workspace:*",
     "@prisma/client": "^6.2.0",

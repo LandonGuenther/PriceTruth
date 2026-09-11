@@ -1,54 +1,37 @@
-import type { Listing, PrismaClient, PriceObservation } from "@prisma/client";
+import type { Listing, PrismaClient } from "@prisma/client";
 import type { AnalysisResponse, HistoryResponse, RetailerId } from "@pricetruth/shared";
 import { RETAILERS } from "@pricetruth/shared";
+import { analyzeListing, type ScoringObservation } from "@pricetruth/scoring";
 import {
-  analyzeListing,
-  collapseToDailySeries,
-  ELIGIBLE_PRICE_TYPES,
-  type ScoringObservation,
-} from "@pricetruth/scoring";
+  PostgresPriceHistoryRepository,
+  type PriceHistoryRepository,
+} from "../repositories/priceHistoryRepository.js";
 
-type ObservationWithSource = PriceObservation & { dataSource: { key: string } };
-
-export type ListingWithObservations = Listing & { observations: ObservationWithSource[] };
-
+/**
+ * Listing lookup only — all observation reads go through the
+ * PriceHistoryRepository (docs/DATA_PLATFORM.md).
+ */
 export async function findListing(
   prisma: PrismaClient,
   retailer: string,
   externalId: string,
-): Promise<ListingWithObservations | null> {
+): Promise<Listing | null> {
   if (!(retailer in RETAILERS)) return null;
   return prisma.listing.findUnique({
     where: { retailerId_externalId: { retailerId: retailer, externalId } },
-    include: {
-      observations: {
-        where: {
-          synthetic: false,
-          status: "ACCEPTED",
-          priceType: { in: [...ELIGIBLE_PRICE_TYPES] },
-        },
-        orderBy: { effectiveAt: "asc" },
-        include: { dataSource: { select: { key: true } } },
-      },
-    },
   });
 }
 
-function toScoring(obs: ObservationWithSource): ScoringObservation {
-  return {
-    priceCents: obs.priceCents,
-    referencePriceCents: obs.referencePriceCents,
-    effectiveAt: obs.effectiveAt.toISOString(),
-    sourceKey: obs.dataSource.key,
-  };
-}
-
-export function analyzeListingRow(listing: ListingWithObservations): AnalysisResponse {
-  const newest = listing.observations[listing.observations.length - 1];
+export async function analyzeListingRow(
+  repo: PriceHistoryRepository,
+  listing: Listing,
+): Promise<AnalysisResponse> {
+  const input = await repo.getAnalysisInput(listing.id);
+  const newest = input.observations[input.observations.length - 1];
   const result = analyzeListing({
-    observations: listing.observations.map(toScoring),
+    observations: input.observations,
     asOf: new Date(),
-    currency: newest?.currency ?? "USD",
+    currency: input.currency ?? "USD",
   });
 
   return {
@@ -56,39 +39,47 @@ export function analyzeListingRow(listing: ListingWithObservations): AnalysisRes
     externalId: listing.externalId,
     title: listing.title,
     url: listing.url,
-    currency: newest?.currency ?? "USD",
+    currency: input.currency ?? "USD",
     currentPriceCents: newest?.priceCents ?? 0,
     referencePriceCents: newest?.referencePriceCents ?? null,
-    effectiveAt: newest?.effectiveAt.toISOString() ?? new Date(0).toISOString(),
+    effectiveAt: newest?.effectiveAt ?? new Date(0).toISOString(),
     typical: result.typical,
     stats: result.stats,
     confidence: result.confidence,
     discountIntegrity: result.discountIntegrity,
     dealScore: result.dealScore,
+    evidence: input.evidence,
     computedAt: new Date().toISOString(),
   };
 }
 
-export function listingHistory(listing: ListingWithObservations, days: number): HistoryResponse {
+export async function listingHistory(
+  repo: PriceHistoryRepository,
+  listing: Listing,
+  days: number,
+): Promise<HistoryResponse> {
   const cutoff = new Date(Date.now() - days * 86_400_000);
-  const points = listing.observations
-    .filter((o) => o.effectiveAt >= cutoff)
-    .map((o) => ({
-      effectiveAt: o.effectiveAt.toISOString(),
-      priceCents: o.priceCents,
-      referencePriceCents: o.referencePriceCents,
-      source: o.dataSource.key,
-    }));
-
-  const daily = collapseToDailySeries(
-    listing.observations.filter((o) => o.effectiveAt >= cutoff).map(toScoring),
-  ).map((p) => ({ day: p.day, medianPriceCents: p.medianPriceCents }));
+  const rows = await repo.getHistory(listing.id, { since: cutoff });
+  const daily = await repo.getDailyHistory(listing.id, { since: cutoff });
 
   return {
     retailer: listing.retailerId as RetailerId,
     externalId: listing.externalId,
     days,
-    points,
-    daily,
+    points: rows.map((o) => ({
+      effectiveAt: o.effectiveAt.toISOString(),
+      priceCents: o.priceCents,
+      referencePriceCents: o.referencePriceCents,
+      source: o.dataSource.key,
+    })),
+    daily: daily.map((p) => ({ day: p.day, medianPriceCents: p.medianPriceCents })),
   };
 }
+
+/** Shared repository instance factory used by the routes. */
+export function defaultHistoryRepository(prisma: PrismaClient): PriceHistoryRepository {
+  return new PostgresPriceHistoryRepository(prisma);
+}
+
+// Re-export for callers that still type against the old shape.
+export type { ScoringObservation };

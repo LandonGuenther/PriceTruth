@@ -86,6 +86,9 @@ Known Amazon behaviors seen live (all expected, not bugs):
 - Sustained browsing triggers Amazon `503 Service Unavailable` pages; no
   observation is written for those. Waiting ~30s and continuing is enough;
   never try to bypass.
+- Amazon prices are scoped to buy-box containers; price elements inside a
+  `data-asin` subtree belonging to another ASIN (cross-sell carousels) are
+  ignored, and "add to cart to see price" pages report `no_price`.
 - `/dp/`, `/gp/product/` and `/gp/aw/d/` forms all ingest identically; revisits
   within the dedup window are accepted as duplicates.
 
