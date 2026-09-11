@@ -9,6 +9,9 @@ export const OBSERVATION_SOURCES = {
 
 export type ObservationSource = (typeof OBSERVATION_SOURCES)[keyof typeof OBSERVATION_SOURCES];
 
+/** Request header carrying the extension/client version on observation ingest. */
+export const CLIENT_VERSION_HEADER = "x-pricetruth-client-version";
+
 export interface RetailerObservation {
   retailer: RetailerId;
   externalId: string;
