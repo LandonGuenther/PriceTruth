@@ -28,7 +28,7 @@ function fakeChrome(initial: Record<string, TabState>) {
       },
     },
   };
-  // StorageArea.onChanged fires with a single `changes` argument — no area.
+  // StorageArea.onChanged fires with a single `changes` argument  -  no area.
   const fireChange = (key: string, newValue: TabState) =>
     changeListeners.forEach((cb) => cb({ [key]: { newValue } }));
   return { chrome, store, fireChange };

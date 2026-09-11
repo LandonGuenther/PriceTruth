@@ -10,7 +10,7 @@ const storage: HandlerStorage = {
   remove: (key) => chrome.storage.session.remove(key),
 };
 
-// Wrap `fetch` — storing it bare and calling it later throws "Illegal invocation".
+// Wrap `fetch`  -  storing it bare and calling it later throws "Illegal invocation".
 const api = new ApiClient(
   API_BASE_URL,
   (url, init) => fetch(url, init),
@@ -45,7 +45,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  // changeInfo.url is never populated without the "tabs" permission — reset
+  // changeInfo.url is never populated without the "tabs" permission  -  reset
   // is ping-based instead (see handleNavigationStart).
   if (changeInfo.status === "loading") {
     void handleNavigationStart(tabId, deps);

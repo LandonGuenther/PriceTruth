@@ -49,7 +49,7 @@ Permissions stay minimal: `sidePanel`, `storage`, API host only. No `tabs` / `hi
 ### P3 – UX
 
 9. **Panel states are coarse:** idle / unsupported / loading / ready / error. Missing explicit: non-product-on-supported-host, ambiguous price, network vs API vs malformed, insufficient-history as first-class surface (partially covered by confidence banner).
-10. **Insufficient history** is a small notice; should be a dedicated, intentional panel section (no fake scores). Already hides numeric scores when INSUFFICIENT — keep that invariant.
+10. **Insufficient history** is a small notice; should be a dedicated, intentional panel section (no fake scores). Already hides numeric scores when INSUFFICIENT  -  keep that invariant.
 11. **History chart** has no 30/90/180/ALL window control; draws continuous polyline across gaps (implies observations on missing days).
 12. **Reason strings** are raw backend prose; no client-side reason-code map / graceful unknown handling.
 13. **No diagnostics mode** for adapter method, warnings, API reachability, panel state.
@@ -76,7 +76,7 @@ Permissions stay minimal: `sidePanel`, `storage`, API host only. No `tabs` / `hi
 ### P7 – Diagnostics / privacy / security
 
 24. Privacy posture is strong (session storage, omit credentials, no DOM write, narrow matches). Preserve it.
-25. Titles rendered as React text (safe). No `dangerouslySetInnerHTML` today — keep the grep clean.
+25. Titles rendered as React text (safe). No `dangerouslySetInnerHTML` today  -  keep the grep clean.
 26. Package script zips all of `dist/`; verify no tests/fixtures/.env leak into the zip (dist should be build output only).
 
 ### P8 – Packaging / CI / docs

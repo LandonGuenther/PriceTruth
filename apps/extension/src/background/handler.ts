@@ -28,7 +28,7 @@ export interface HandlerDeps {
   cancelSchedule?: (handle: unknown) => void;
 }
 
-/** Delay before pinging after a navigation starts — lets the new page's content script load. */
+/** Delay before pinging after a navigation starts  -  lets the new page's content script load. */
 export const NAVIGATION_PING_DELAY_MS = 1500;
 
 const unreachableMessage = `Could not reach the ${PRODUCT_NAME} service. Check that it is running and try again.`;
@@ -37,7 +37,7 @@ const apiMessage = `The ${PRODUCT_NAME} service returned an error. Try again in 
 const malformedMessage = `The ${PRODUCT_NAME} service returned an unexpected response. Try updating the extension.`;
 const unsupportedMessage = `This extension is out of date for the ${PRODUCT_NAME} service. Please update the extension.`;
 
-/** Per-tab monotonic generation — bumps on every new observation identity or retry. */
+/** Per-tab monotonic generation  -  bumps on every new observation identity or retry. */
 const generations = new Map<number, number>();
 /** Per-tab pending navigation wait (timer handle + resolve to unblock awaiters). */
 const navWaits = new Map<number, { handle: unknown; resolve: () => void }>();
@@ -103,7 +103,7 @@ async function runObservation(
 
   try {
     const ingest: IngestResponse = await deps.api.postObservation(observation);
-    // A newer observation (or retry) started while we were posting — abandon.
+    // A newer observation (or retry) started while we were posting  -  abandon.
     if (generations.get(tabId) !== generation) return;
 
     await setState(deps, tabId, {
@@ -151,7 +151,7 @@ async function runObservation(
  * short delay we ping the content script: no answer means the tab left a
  * supported host (or is still loading) → reset to idle. A live supported page
  * refreshes state itself via the observer. Amazon emits ghost "loading" events
- * after page load — the ping prevents those from wiping ready state, and an
+ * after page load  -  the ping prevents those from wiping ready state, and an
  * in-flight ingest (state "loading") is never touched.
  *
  * Overlapping navigation events cancel the previous ping timer and bump an
@@ -196,7 +196,7 @@ export async function handleMessage(
   if (msg.type === "pt/observation" && tabId !== undefined) {
     const prev = await getState(deps, tabId);
     // If the product identity changed, the loading state itself is the
-    // invalidation signal — never leave the previous ready analysis visible.
+    // invalidation signal  -  never leave the previous ready analysis visible.
     if (
       prev?.status === "ready" &&
       identityKey(prev.observation) !== identityKey(msg.observation)
