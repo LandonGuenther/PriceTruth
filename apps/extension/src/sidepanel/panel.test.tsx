@@ -183,4 +183,84 @@ describe("Panel", () => {
     expect(screen.getByText("<script>alert(1)</script> Safe Title")).toBeTruthy();
     expect(document.querySelector("script")).toBeNull();
   });
+
+  it("loading state announces submitting phase", () => {
+    render(
+      <Panel
+        state={{
+          status: "loading",
+          observation,
+          phase: "submitting",
+          generation: 2,
+        }}
+      />,
+    );
+    expect(screen.getAllByText(/Saving today/i).length).toBeGreaterThan(0);
+  });
+
+  it("loading analyzing phase shows history check copy", () => {
+    render(
+      <Panel
+        state={{
+          status: "loading",
+          observation,
+          phase: "analyzing",
+          generation: 3,
+        }}
+      />,
+    );
+    expect(screen.getAllByText(/Checking price history/i).length).toBeGreaterThan(0);
+  });
+
+  it("network error kind still exposes Retry", () => {
+    render(
+      <Panel
+        state={{
+          status: "error",
+          observation,
+          message: "Could not reach the PriceTruth service.",
+          updatedAt: "",
+          kind: "network",
+        }}
+        onRetry={() => {}}
+      />,
+    );
+    expect(screen.getByText("Retry")).toBeTruthy();
+    expect(screen.getAllByText(/Could not reach/i).length).toBeGreaterThan(0);
+  });
+
+  it("unknown reason codes still render without crashing", () => {
+    render(
+      <Panel
+        state={{
+          ...ready,
+          analysis: {
+            ...analysis,
+            discountIntegrity: {
+              ...analysis.discountIntegrity,
+              reasons: ["FUTURE_REASON_CODE_XYZ", "Reference price not supported by history"],
+            },
+            dealScore: {
+              ...analysis.dealScore,
+              reasons: ["SOME_NEW_BACKEND_CODE"],
+            },
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText("FUTURE_REASON_CODE_XYZ")).toBeTruthy();
+    expect(screen.getByText("SOME_NEW_BACKEND_CODE")).toBeTruthy();
+    expect(screen.getByText(/rarely/i)).toBeTruthy();
+  });
+
+  it("diagnostics toggle control is present", () => {
+    render(<Panel state={ready} />);
+    expect(screen.getByText(/Diagnostics/i)).toBeTruthy();
+  });
+
+  it("feedback controls are present on ready state", () => {
+    render(<Panel state={ready} />);
+    expect(screen.getByText(/Is this price correct/i)).toBeTruthy();
+  });
+
 });

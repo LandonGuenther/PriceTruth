@@ -10,7 +10,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "package": "tsx scripts/package.ts",
-    "gen-icons": "tsx scripts/gen-icons.ts"
+    "gen-icons": "tsx scripts/gen-icons.ts",
+    "verify-package": "tsx scripts/verify-package.ts"
   },
   "dependencies": {
     "@pricetruth/retailer-adapters": "workspace:*",

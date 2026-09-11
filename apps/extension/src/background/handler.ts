@@ -1,7 +1,7 @@
 import { PRODUCT_NAME, type RetailerObservation } from "@pricetruth/shared";
 import type { ExtractionMeta, RuntimeMessage, TabState } from "../messages.js";
 import { tabStateKey } from "../messages.js";
-import { ApiError, ApiTimeoutError, type ApiClient, type IngestResponse } from "./api.js";
+import { ApiError, ApiMalformedError, ApiTimeoutError, ApiUnsupportedVersionError, type ApiClient, type IngestResponse } from "./api.js";
 
 export interface HandlerStorage {
   get(key: string): Promise<Record<string, TabState>>;
@@ -27,6 +27,8 @@ export const NAVIGATION_PING_DELAY_MS = 1500;
 const unreachableMessage = `Could not reach the ${PRODUCT_NAME} service. Check that it is running and try again.`;
 const timeoutMessage = `The ${PRODUCT_NAME} service took too long to respond. Try again in a moment.`;
 const apiMessage = `The ${PRODUCT_NAME} service returned an error. Try again in a moment.`;
+const malformedMessage = `The ${PRODUCT_NAME} service returned an unexpected response. Try updating the extension.`;
+const unsupportedMessage = `This extension is out of date for the ${PRODUCT_NAME} service. Please update the extension.`;
 
 /** Per-tab monotonic generation — bumps on every new observation identity or retry. */
 const generations = new Map<number, number>();
@@ -66,6 +68,8 @@ async function getState(deps: HandlerDeps, tabId: number): Promise<TabState | un
 
 function classifyError(err: unknown): { kind: "network" | "api" | "timeout" | "unknown"; message: string } {
   if (err instanceof ApiTimeoutError) return { kind: "timeout", message: timeoutMessage };
+  if (err instanceof ApiUnsupportedVersionError) return { kind: "api", message: unsupportedMessage };
+  if (err instanceof ApiMalformedError) return { kind: "api", message: malformedMessage };
   if (err instanceof ApiError) return { kind: "api", message: apiMessage };
   if (err instanceof TypeError) return { kind: "network", message: unreachableMessage };
   return { kind: "unknown", message: unreachableMessage };
