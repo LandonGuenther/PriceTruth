@@ -4,7 +4,7 @@ Date: 2026-09-11. Branch `devin/pricetruth-foundation-overnight`, one PR against
 (URL at the end). Nothing was merged.
 
 - **Starting commit:** `0ca7000` (merge of PR #1, Phase 2 data foundation)
-- **Ending commit:** see the PR head (the last commit adds this report)
+- **Ending commit:** `b8bc321` + this follow-up (PR head)
 - **Baseline before changes:** lint / typecheck / test / build green, **182 tests**
 - **End state:** lint / typecheck / format / test / build green, **267 tests**
   (shared 17, catalog 16, scoring 39, retailer-adapters 89, extension 24, api 82)
@@ -150,4 +150,4 @@ text, error leakage, rate limit) are rejected or neutralised by existing control
 
 ## PR
 
-PR_URL_PLACEHOLDER
+https://github.com/LandonGuenther/PriceTruth/pull/5
