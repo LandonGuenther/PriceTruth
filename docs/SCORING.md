@@ -5,11 +5,18 @@ Two scores are computed independently and are never merged.
 
 ## Inputs
 
-- `observations`: valid, non-synthetic `PriceObservation`s for one listing, each with
-  `priceCents`, optional `referencePriceCents`, `observedAt` (ISO), `source`.
-- `asOf`: the timestamp the analysis is computed for (defaults to the newest observation).
-- Current price = newest valid observation's `priceCents`.
-- Current reference price = newest valid observation's `referencePriceCents` (may be null).
+- `observations`: **eligible** `PriceObservation`s for one listing — `synthetic
+= false`, `status = 'ACCEPTED'`, and `priceType ∈ {STANDARD, SALE}`
+  (`ELIGIBLE_PRICE_TYPES`). Each carries `priceCents`, optional
+  `referencePriceCents`, `effectiveAt` (ISO; the server-authoritative time per
+  ADR-004), and `sourceKey` (the `DataSource.key`).
+- `asOf`: the timestamp the analysis is computed for (defaults to the newest
+  eligible observation).
+- Current price = newest eligible observation's `priceCents`.
+- Current reference price = newest eligible observation's `referencePriceCents` (may be null).
+
+All time math — "newest" ordering, day bucketing, window medians, staleness —
+uses `effectiveAt`, never `clientObservedAt`.
 
 ## Daily series
 

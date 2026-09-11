@@ -13,8 +13,8 @@ function series(days: number, endDay: string, price = 30000): ScoringObservation
     return {
       priceCents: price,
       referencePriceCents: null,
-      observedAt: d.toISOString(),
-      source: "test",
+      effectiveAt: d.toISOString(),
+      sourceKey: "test",
     };
   });
 }
@@ -51,20 +51,20 @@ describe("computeConfidence base levels", () => {
       {
         priceCents: 100,
         referencePriceCents: null,
-        observedAt: "2025-06-01T00:00:00Z",
-        source: "t",
+        effectiveAt: "2025-06-01T00:00:00Z",
+        sourceKey: "t",
       },
       {
         priceCents: 100,
         referencePriceCents: null,
-        observedAt: "2025-06-15T00:00:00Z",
-        source: "t",
+        effectiveAt: "2025-06-15T00:00:00Z",
+        sourceKey: "t",
       },
       {
         priceCents: 100,
         referencePriceCents: null,
-        observedAt: "2025-06-30T00:00:00Z",
-        source: "t",
+        effectiveAt: "2025-06-30T00:00:00Z",
+        sourceKey: "t",
       },
     ];
     expect(confidenceOf(sparse, asOf).level).toBe("LOW");

@@ -19,7 +19,7 @@ export function dailyPointsInWindow(daily: DailyPoint[], asOf: Date, days: numbe
  */
 export function computeStats(observations: ScoringObservation[], asOf: Date): HistoricalStats {
   const daily = collapseToDailySeries(observations);
-  const sorted = [...observations].sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+  const sorted = [...observations].sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
 
   const observationCount = observations.length;
   const uniqueDays = daily.length;
@@ -49,8 +49,8 @@ export function computeStats(observations: ScoringObservation[], asOf: Date): Hi
     observationCount,
     uniqueDays,
     coverageDays,
-    newestObservedAt: newest?.observedAt ?? null,
-    oldestObservedAt: oldest?.observedAt ?? null,
+    newestObservedAt: newest?.effectiveAt ?? null,
+    oldestObservedAt: oldest?.effectiveAt ?? null,
     median30Cents: medianInWindow(30),
     median90Cents: medianInWindow(90),
     median180Cents: medianInWindow(180),

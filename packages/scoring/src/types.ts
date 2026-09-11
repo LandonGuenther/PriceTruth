@@ -1,8 +1,11 @@
+/** Price types eligible for history/scoring (retailer-agnostic eligibility). */
+export const ELIGIBLE_PRICE_TYPES = ["STANDARD", "SALE"] as const;
+
 export interface ScoringObservation {
   priceCents: number;
   referencePriceCents: number | null;
-  observedAt: string;
-  source: string;
+  effectiveAt: string;
+  sourceKey: string;
 }
 
 export interface DailyPoint {

@@ -5,8 +5,8 @@ import type { ScoringObservation } from "./types.js";
 const obs = (day: string, priceCents: number, time = "T12:00:00Z"): ScoringObservation => ({
   priceCents,
   referencePriceCents: null,
-  observedAt: `${day}${time}`,
-  source: "test",
+  effectiveAt: `${day}${time}`,
+  sourceKey: "test",
 });
 
 describe("collapseToDailySeries", () => {
@@ -38,8 +38,8 @@ describe("collapseToDailySeries", () => {
       {
         priceCents: 500,
         referencePriceCents: null,
-        observedAt: "2025-01-11T23:30:00-05:00",
-        source: "test",
+        effectiveAt: "2025-01-11T23:30:00-05:00",
+        sourceKey: "test",
       },
     ]);
     expect(daily.map((p) => p.day)).toEqual(["2025-01-10", "2025-01-11", "2025-01-12"]);

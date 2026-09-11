@@ -27,15 +27,15 @@ export function workedExampleObservations(): ScoringObservation[] {
     observations.push({
       priceCents,
       referencePriceCents: null,
-      observedAt: d.toISOString(),
-      source: "test",
+      effectiveAt: d.toISOString(),
+      sourceKey: "test",
     });
   }
   observations.push({
     priceCents: 29900,
     referencePriceCents: 49900,
-    observedAt: AS_OF.toISOString(),
-    source: "test",
+    effectiveAt: AS_OF.toISOString(),
+    sourceKey: "test",
   });
   return observations;
 }
@@ -98,14 +98,14 @@ describe("discount integrity edge cases", () => {
       {
         priceCents: 24000,
         referencePriceCents: null,
-        observedAt: "2025-06-29T12:00:00.000Z",
-        source: "test",
+        effectiveAt: "2025-06-29T12:00:00.000Z",
+        sourceKey: "test",
       },
       {
         priceCents: 23899,
         referencePriceCents: 27499,
-        observedAt: AS_OF.toISOString(),
-        source: "test",
+        effectiveAt: AS_OF.toISOString(),
+        sourceKey: "test",
       },
     ];
     const result = analyzeListing({ observations: obs, asOf: AS_OF });
@@ -120,8 +120,8 @@ describe("discount integrity edge cases", () => {
       {
         priceCents: 23899,
         referencePriceCents: null,
-        observedAt: AS_OF.toISOString(),
-        source: "test",
+        effectiveAt: AS_OF.toISOString(),
+        sourceKey: "test",
       },
     ];
     const result = analyzeListing({ observations: obs, asOf: AS_OF });

@@ -59,6 +59,10 @@ describe("extract", () => {
       inStock: true,
       source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
       observedAt: NOW.toISOString(),
+      schemaVersion: 1,
+      priceType: "STANDARD",
+      referenceType: "UNKNOWN",
+      extractorVersion: "1.0.0",
     });
     expect(r.observation.variant).toEqual({ Size: "Large" });
   });

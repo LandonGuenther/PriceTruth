@@ -48,7 +48,8 @@ export interface AnalysisResponse {
   currency: string;
   currentPriceCents: number;
   referencePriceCents: number | null;
-  observedAt: string;
+  /** Effective observation time (server-authoritative per source trust class). */
+  effectiveAt: string;
   typical: { cents: number | null; window: TypicalWindow };
   stats: HistoricalStats;
   confidence: ConfidenceResult;
@@ -62,7 +63,7 @@ export interface HistoryResponse {
   externalId: string;
   days: number;
   points: Array<{
-    observedAt: string;
+    effectiveAt: string;
     priceCents: number;
     referencePriceCents: number | null;
     source: string;

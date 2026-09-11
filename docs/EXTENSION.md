@@ -93,10 +93,15 @@ Known Amazon behaviors seen live (all expected, not bugs):
 
 The extension sends only `RetailerObservation` fields (retailer, external id,
 url, title, brand/model, prices, currency, availability, variant, source,
-observedAt) plus the `x-pricetruth-client-version` header to the API. It never
-reads cookies or form fields, never writes to the DOM, and collects no browsing
-history or page content beyond product metadata and prices. The user-agent
-string is hashed (sha256) server-side and never stored raw.
+observedAt, schemaVersion, priceType, referenceType, extractorVersion) plus the
+`x-pricetruth-client-version` header to the API. `observedAt` is the
+client-reported time; the server stores it as `clientObservedAt` and applies the
+time policy in docs/adr/ADR-004. Adapters always emit `schemaVersion: 1`,
+`priceType: "STANDARD"`, `referenceType: "UNKNOWN"` when a reference price is
+present, and `extractorVersion` = the package `ADAPTER_VERSION`. The extension
+never reads cookies or form fields, never writes to the DOM, and collects no
+browsing history or page content beyond product metadata and prices. The
+user-agent string is never stored. See docs/PRIVACY.md.
 
 ## Packaging
 

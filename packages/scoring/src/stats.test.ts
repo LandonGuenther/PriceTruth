@@ -10,8 +10,8 @@ const obs = (
 ): ScoringObservation => ({
   priceCents,
   referencePriceCents,
-  observedAt: `${day}${time}`,
-  source: "test",
+  effectiveAt: `${day}${time}`,
+  sourceKey: "test",
 });
 
 describe("dailyPointsInWindow", () => {

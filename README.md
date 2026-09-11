@@ -36,7 +36,25 @@ pnpm test
 | `apps/api`                   | `@pricetruth/api`               | Fastify 5 + Prisma 6 + Postgres: observation ingest, analysis, history                         |
 | `apps/extension`             | `@pricetruth/extension`         | Chrome MV3 side-panel extension (React + Vite)                                                 |
 
-See also: [docs/API.md](docs/API.md), [docs/DATA_MODEL.md](docs/DATA_MODEL.md), [docs/EXTENSION.md](docs/EXTENSION.md).
+## Data model in one paragraph
+
+`PriceObservation` is an append-only fact: the observed price, a typed reference
+price, provenance (`DataSource` with a trust class, schema/extractor versions),
+and three timestamps (`receivedAt`, `clientObservedAt`, `effectiveAt`). Deletes
+are forbidden and only `status` may change (DB-enforced; transitions are logged
+in `ObservationStatusEvent`). Listings, products and variants are dimension
+tables; "current price" is always derived from the newest eligible observation.
+
+## Docs
+
+- [docs/API.md](docs/API.md) · [docs/DATA_MODEL.md](docs/DATA_MODEL.md) ·
+  [docs/SCORING.md](docs/SCORING.md) · [docs/EXTENSION.md](docs/EXTENSION.md) ·
+  [docs/PRIVACY.md](docs/PRIVACY.md)
+- ADRs: [observation immutability](docs/adr/ADR-001-observation-immutability.md) ·
+  [identifiers & types](docs/adr/ADR-002-identifiers-and-database-types.md) ·
+  [provenance](docs/adr/ADR-003-provenance.md) ·
+  [client vs server time](docs/adr/ADR-004-client-time-vs-server-time.md)
+- Migration notes: [docs/migrations/2026-09-data-foundation.md](docs/migrations/2026-09-data-foundation.md)
 
 ### API quickstart
 

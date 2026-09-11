@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { RETAILERS } from "@pricetruth/shared";
+import { DATA_SOURCE_DEFINITIONS, RETAILERS } from "@pricetruth/shared";
 
 const prisma = new PrismaClient();
 
@@ -11,7 +11,20 @@ async function main(): Promise<void> {
       create: { id: retailer.id, displayName: retailer.displayName },
     });
   }
-  console.log(`Seeded ${Object.keys(RETAILERS).length} retailers.`);
+  for (const ds of DATA_SOURCE_DEFINITIONS) {
+    await prisma.dataSource.upsert({
+      where: { key: ds.key },
+      update: {
+        displayName: ds.displayName,
+        sourceType: ds.sourceType,
+        trustClass: ds.trustClass,
+      },
+      create: { ...ds },
+    });
+  }
+  console.log(
+    `Seeded ${Object.keys(RETAILERS).length} retailers and ${DATA_SOURCE_DEFINITIONS.length} data sources.`,
+  );
 }
 
 main()

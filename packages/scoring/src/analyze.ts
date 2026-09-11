@@ -32,9 +32,9 @@ export function analyzeListing(input: {
   currency?: string;
 }): AnalyzeResult {
   const { observations } = input;
-  const sorted = [...observations].sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+  const sorted = [...observations].sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
   const newest = sorted[sorted.length - 1];
-  const asOf = input.asOf ?? (newest ? new Date(newest.observedAt) : new Date(0));
+  const asOf = input.asOf ?? (newest ? new Date(newest.effectiveAt) : new Date(0));
   const currency = input.currency ?? "USD";
 
   const stats = computeStats(observations, asOf);
