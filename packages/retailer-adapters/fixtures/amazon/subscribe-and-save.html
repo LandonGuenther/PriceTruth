@@ -1,0 +1,25 @@
+<!--
+  One-time buy-box price plus a Subscribe & Save priceToPay. Prefer the
+  one-time cash price; never adopt the SNS amount when both are present.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0SNSCONF1">
+      <input type="hidden" id="ASIN" value="B0SNSCONF1" />
+      <span id="productTitle">Acme Coffee Beans 2 lb</span>
+      <div id="apex_desktop">
+        <span class="priceToPay"><span class="a-offscreen">$29.99</span></span>
+        <div id="snsAccordionRow" class="snsPriceBlock">
+          <span>Subscribe &amp; Save</span>
+          <span id="sns-base-price" class="sns-price priceToPay"
+            ><span class="a-offscreen">$26.99</span></span
+          >
+        </div>
+        <div id="subscribeAccordion" hidden></div>
+      </div>
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>
