@@ -127,6 +127,20 @@ ops status` prints the same payload via `getOpsStatus(prisma)` in
 - `readiness.ts` probes both `../prisma/migrations` (src layout) and
   `../../prisma/migrations` (dist/src layout).
 
+## M5 additions
+
+- Docs: `docs/MIGRATIONS.md`, `docs/DB_CONNECTIONS.md`,
+  `docs/BACKUP_RESTORE.md` (+ `scripts/backup-verify.sh`, verified with
+  `USE_DOCKER=1` — dump→restore→counts OK), `docs/STAGING_DEPLOYMENT.md`.
+- OpenAPI: `src/routes/contract.ts` route table (request bodies reuse the
+  shared zod schemas) + `scripts/openapi.ts` generating `docs/openapi.json`;
+  CI regenerates and `git diff --exit-code`s it. `zod-to-json-schema@3.24.6`
+  added as an api devDep (3.25.x requires zod ^3.25.28/^4; we have 3.23.x).
+- CI additions: shadow-DB migration validation (`pricetruth_shadow` +
+  `migrate diff --from-migrations --exit-code`), Docker image build,
+  `pnpm audit --prod --audit-level=high` (continue-on-error),
+  `deploy-staging.yml` workflow_dispatch scaffold.
+
 ## compatibility risks
 
 - 429 response shape changed from Fastify default to

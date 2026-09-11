@@ -1,0 +1,487 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "PriceTruth API",
+    "version": "1",
+    "description": "Price-evidence API. All responses carry x-pricetruth-api-version and x-request-id; /v1 + /internal responses are cache-control: no-store."
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness probe — always 200",
+        "tags": ["ops"],
+        "responses": {
+          "200": {
+            "description": "{status, product, db, apiVersion, uptimeSeconds, version}"
+          }
+        }
+      }
+    },
+    "/readiness": {
+      "get": {
+        "summary": "Readiness probe — 200 when DB up and migrations applied",
+        "tags": ["ops"],
+        "responses": {
+          "200": {
+            "description": "{status:'ready', checks:{database, migrations}, apiVersion}"
+          },
+          "503": {
+            "description": "not_ready: checks.database/migrations not ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/observations": {
+      "post": {
+        "summary": "Ingest a retailer observation (idempotent via ±60 min dedupe)",
+        "tags": ["ingest"],
+        "responses": {
+          "201": {
+            "description": "{accepted, duplicate, status, listingId, observationId, enrichment, apiVersion}; 200 with duplicate:true on dedupe"
+          },
+          "400": {
+            "description": "unsupported_schema_version: schemaVersion != 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "request_error: Body > 64 KB — {error, message} (+ retryAfterSeconds on 429)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited: 60/min per IP — {error, message} (+ retryAfterSeconds on 429)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "retailer": {
+                    "type": "string",
+                    "enum": ["amazon", "bestbuy"]
+                  },
+                  "externalId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "brand": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "modelNumber": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "gtin": {
+                    "type": "string",
+                    "pattern": "^\\d{8,14}$"
+                  },
+                  "priceCents": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "referencePriceCents": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "inStock": {
+                    "type": "boolean"
+                  },
+                  "variant": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "observedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "schemaVersion": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "priceType": {
+                    "type": "string",
+                    "enum": [
+                      "STANDARD",
+                      "SALE",
+                      "MEMBER",
+                      "SUBSCRIPTION",
+                      "COUPON_REQUIRED",
+                      "INSTALLMENT",
+                      "USED",
+                      "REFURBISHED",
+                      "MARKETPLACE",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "referenceType": {
+                    "type": "string",
+                    "enum": [
+                      "WAS_PRICE",
+                      "LIST_PRICE",
+                      "MSRP",
+                      "COMP_VALUE",
+                      "REGULAR_PRICE",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "extractorVersion": {
+                    "type": "string",
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "retailer",
+                  "externalId",
+                  "url",
+                  "title",
+                  "priceCents",
+                  "currency",
+                  "source",
+                  "observedAt",
+                  "schemaVersion",
+                  "priceType"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/listings/{retailer}/{externalId}/analysis": {
+      "get": {
+        "summary": "Price analysis: Discount Integrity + Deal Score + evidence",
+        "tags": ["read"],
+        "responses": {
+          "200": {
+            "description": "AnalysisResponse + apiVersion"
+          },
+          "404": {
+            "description": "listing_not_found: {error, message} (+ retryAfterSeconds on 429)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited: 240/min per IP — {error, message} (+ retryAfterSeconds on 429)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "retailer",
+            "in": "path",
+            "required": true,
+            "description": "Retailer id",
+            "schema": {
+              "type": "string",
+              "pattern": "^(amazon|bestbuy)$"
+            }
+          },
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "description": "Retailer listing id (ASIN / SKU)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/listings/{retailer}/{externalId}/history": {
+      "get": {
+        "summary": "Raw observation points + daily-median series",
+        "tags": ["read"],
+        "responses": {
+          "200": {
+            "description": "HistoryResponse + apiVersion"
+          },
+          "404": {
+            "description": "listing_not_found: {error, message} (+ retryAfterSeconds on 429)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited: 240/min per IP — {error, message} (+ retryAfterSeconds on 429)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "retailer",
+            "in": "path",
+            "required": true,
+            "description": "Retailer id",
+            "schema": {
+              "type": "string",
+              "pattern": "^(amazon|bestbuy)$"
+            }
+          },
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "description": "Retailer listing id (ASIN / SKU)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Window length in days",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 730,
+              "default": 180
+            }
+          }
+        ]
+      }
+    },
+    "/internal/metrics": {
+      "get": {
+        "summary": "Process-local metrics (JSON; ?format=prometheus for text)",
+        "tags": ["internal"],
+        "responses": {
+          "200": {
+            "description": "{counters:[{name,labels,count}], durations:[{operation,count,p50,p95,max}]}"
+          }
+        },
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["prometheus"]
+            }
+          }
+        ]
+      }
+    },
+    "/internal/status": {
+      "get": {
+        "summary": "Ops status payload (observations, job checkpoints, counts)",
+        "tags": ["internal"],
+        "responses": {
+          "200": {
+            "description": "{latestObservationReceivedAt, observationsLastHour/24h, statusDistribution, rollup, archive, counts, lastJobRuns}"
+          },
+          "404": {
+            "description": "not_found: Token unset or wrong (404 hides the route)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  }
+}

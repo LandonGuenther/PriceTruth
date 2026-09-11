@@ -54,6 +54,9 @@ tables; "current price" is always derived from the newest eligible observation.
   [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md) · [docs/DATA_PLATFORM.md](docs/DATA_PLATFORM.md) · [docs/ARCHIVE_FORMAT.md](docs/ARCHIVE_FORMAT.md)
 - [docs/SECURITY.md](docs/SECURITY.md) · [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md) ·
   [docs/SCALE_TRIGGERS.md](docs/SCALE_TRIGGERS.md)
+- Ops: [docs/MIGRATIONS.md](docs/MIGRATIONS.md) · [docs/DB_CONNECTIONS.md](docs/DB_CONNECTIONS.md) ·
+  [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) · [docs/STAGING_DEPLOYMENT.md](docs/STAGING_DEPLOYMENT.md) ·
+  [docs/openapi.json](docs/openapi.json)
 - ADRs: [observation immutability](docs/adr/ADR-001-observation-immutability.md) ·
   [identifiers & types](docs/adr/ADR-002-identifiers-and-database-types.md) ·
   [provenance](docs/adr/ADR-003-provenance.md) ·

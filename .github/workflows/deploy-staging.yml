@@ -1,0 +1,29 @@
+name: deploy-staging
+
+# Manual-only staging deploy. Requires repository environments/secrets to be
+# configured before use: STAGING_HOST, STAGING_DATABASE_URL, STAGING_APP_VERSION.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: git sha)"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: |
+          docker build -f apps/api/Dockerfile \
+            --build-arg APP_VERSION="${{ github.sha }}" \
+            -t "pricetruth-api:${{ inputs.image_tag || github.sha }}" .
+
+      - name: Deploy placeholder
+        run: |
+          echo "Deploy step is a placeholder until the staging host is provisioned."
+          echo "Image: pricetruth-api:${{ inputs.image_tag || github.sha }}"
+          echo "Runbook: docs/STAGING_DEPLOYMENT.md"

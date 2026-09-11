@@ -15,6 +15,7 @@
     "catalog": "tsx scripts/catalog.ts",
     "jobs": "tsx scripts/jobs.ts",
     "ops": "tsx scripts/ops.ts",
+    "openapi": "tsx scripts/openapi.ts",
     "loadgen": "tsx scripts/loadgen.ts",
     "bench": "tsx scripts/bench.ts",
     "db:migrate:dev": "prisma migrate dev",
@@ -41,6 +42,7 @@
     "prisma": "^6.2.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.3"
+    "vitest": "^2.1.3",
+    "zod-to-json-schema": "3.24.6"
   }
 }
