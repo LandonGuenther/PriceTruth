@@ -4,39 +4,87 @@
 
 `5e9dd67d50e84a16a0a4e0437204b83220e6a29d`
 
+## CURSOR HEAD SHA
+
+`29512119c9ed41a85c1dde24bd1b4482e0866ceb` (docs/package commits may follow)
+
 ## Branch
 
 `cursor/public-beta-extension`
 
-## Ownership
+## Owned / changed
 
-Cursor owns: `apps/extension/**`, `packages/retailer-adapters/**`, extension packaging, extension docs/QA.
+- `apps/extension/**` (state machine, API client validation, production package gate, panel UX, diagnostics, feedback, a11y)
+- `packages/retailer-adapters/**` (`ambiguous_price`, unit-price / Comp. Value / financing fixtures)
+- `docs/EXTENSION.md`, `docs/EXTENSION_ARCHITECTURE.md`, `docs/EXTENSION_QA.md`, `docs/EXTENSION_PERFORMANCE.md`
+- `docs/BETA_EXTENSION_CHECKLIST.md`, `docs/EXTENSION_REAL_WORLD_TEST_MATRIX.md`
+- `docs/handoffs/cursor-handoff.md`
 
-Devin owns: `apps/api/**`, Prisma, workers, data platform, `packages/scoring/**`, catalog identity.
+## API assumptions
 
-## Baseline (from main)
+- `POST /v1/observations`
+- `GET /v1/listings/:retailer/:externalId/analysis`
+- `GET /v1/listings/:retailer/:externalId/history`
+- Additive unknown JSON fields are tolerated
+- Existing field names are not renamed by this branch
+- Optional response header `x-pricetruth-api-version` (major)
 
-| Gate | Extension / adapters | Full monorepo |
-| --- | --- | --- |
-| lint | pass | pass |
-| typecheck | pass (`@pricetruth/extension`, `@pricetruth/retailer-adapters`) | **FAIL** in `apps/api` (Prisma client missing `ObservationStatus`, `PriceType`, `listingVariant`, `dataSource`, `effectiveAt`, `status`, etc.) |
-| test | extension 24, retailer-adapters 92 | **FAIL** in `apps/api` integration tests (same schema drift) |
-| build | extension pass | **FAIL** in `apps/api` |
+## Shared types touched
 
-These API/Prisma failures are **out of Cursor ownership**. Documented here for Devin; Cursor continues on extension/adapters only.
+None intentionally. Extension-local parsers wrap `@pricetruth/shared` response types.
 
-## Backend changes requested (do not implement in Cursor)
+## Backend changes requested
 
-None required to unblock extension work yet. After Devin merges:
+1. Publish the production API origin for packaging (`VITE_API_BASE_URL`).
+2. Confirm CORS allows the Chrome extension origin model used in MV3.
+3. Keep analysis/history response fields additive-compatible through Devin merge.
+4. Monorepo `apps/api` typecheck/test currently fails on main from Prisma client drift (`ObservationStatus`, `effectiveAt`, etc.). That is Devin-owned; Cursor did not patch it.
 
-1. Confirm production API origin and CORS allowlist for the extension ID / packaged origin model (MV3 extension pages).
-2. Confirm `/v1/observations`, `/v1/listings/:retailer/:id/analysis`, `/v1/listings/:retailer/:id/history` remain additive-compatible with `AnalysisResponse` / `HistoryResponse` in `@pricetruth/shared`.
-3. If Devin renames fields (forbidden by contract) or removes `evidence` / `effectiveAt`, tell Cursor before merge so the extension client validators can adapt.
+## Production API integration status
 
-## Shared types
+Package gate is ready. Production URL is not hard-coded. Waiting on Devin handoff for the real origin before a testers zip is cut.
 
-Cursor will avoid editing `packages/shared` unless a compile break forces a tiny additive export. Prefer extension-local parsers that accept unknown extra JSON fields.
+## Test totals (this branch)
 
-## Status
+- Extension: 48 passed
+- Retailer adapters: 115 passed
+- Amazon fixtures: 23
+- Best Buy fixtures: 15
 
-Work in progress. This file will be updated with HEAD SHA, test totals, fixture totals, bundle size, P0/P1/P2, and post-Devin rebase steps before PR.
+## Bundle / package
+
+- content ~73KB, service-worker ~10KB, sidepanel ~158KB
+- verified zip ~90KB, 12 entries, no tests/fixtures/src/node_modules
+
+## Known issues
+
+### P0
+
+- None known in extension-owned code after local green runs.
+
+### P1
+
+- Live Amazon visible buy-box confirmation still needs daytime manual pass (pages often hide price in automation).
+- Full monorepo typecheck/test red on main due to API/Prisma drift (blocks whole-repo CI until Devin lands).
+- Production API URL unknown until backend deploy docs arrive.
+
+### P2
+
+- Real-world matrix rows are empty placeholders for daytime filling.
+- Optional Chrome fixture E2E harness can be expanded further; CI stays fixture/unit based.
+
+## Exact steps after Devin merges
+
+1. Wait for Devin/backend PR to merge to `main`.
+2. `git fetch origin main && git checkout cursor/public-beta-extension && git rebase origin/main`
+3. Fix any additive API/type mismatches in `apps/extension/src/background/api.ts` parsers only.
+4. Run `pnpm --filter @pricetruth/extension typecheck test build`
+5. Run `pnpm --filter @pricetruth/retailer-adapters typecheck test`
+6. If whole-repo gates are green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+7. Build testers zip with the real origin:
+   `VITE_API_BASE_URL=<prod-origin> pnpm --filter @pricetruth/extension build && VITE_API_BASE_URL=<prod-origin> pnpm --filter @pricetruth/extension package && pnpm --filter @pricetruth/extension verify-package`
+8. Do not merge this PR until steps 1-6 succeed.
+
+## Do not merge order
+
+Devin first, Cursor rebase second, then Cursor merge.
