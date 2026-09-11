@@ -107,7 +107,9 @@ export async function runDailyRollupJob(
   for (;;) {
     if (opts.signal?.aborted) break;
     await opts.heartbeat?.();
-    const progress = await prisma.$transaction(async (tx) => {
+    // Neon round-trip latency from Fly can exceed Prisma's 5s default under load.
+    const progress = await prisma.$transaction(
+      async (tx) => {
       const obsCursor = await getCursor(tx, OBS_CURSOR);
       const evCursor = await getCursor(tx, EVENT_CURSOR);
 
@@ -146,7 +148,9 @@ export async function runDailyRollupJob(
         });
       }
       return { obs: newObs.length, events: newEvents.length, pairs: rolled };
-    });
+      },
+      { timeout: 60_000, maxWait: 10_000 },
+    );
 
     totals.rolledDays += progress.pairs;
     totals.scannedObservations += progress.obs;
