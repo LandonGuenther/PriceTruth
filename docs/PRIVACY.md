@@ -51,4 +51,12 @@ host permissions, no remote code.
 
 Rows may be marked `synthetic` only by the `synthetic:test` data source, which
 is not claimable by any client. Synthetic rows are excluded from analysis and
-history, keeping demo/test data separated from real observations.
+history, keeping demo/test data separated from real observations. Load and
+benchmark tooling (`loadgen`/`bench`) writes generated rows only to a
+disposable `*_load` database and refuses any other target.
+
+## No installation identifier
+
+The extension sends no install ID, device ID, or per-client token — corroboration
+deliberately does not use an installation-level signal (see
+`docs/DATA_QUALITY.md` known limitations).

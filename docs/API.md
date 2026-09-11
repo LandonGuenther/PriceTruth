@@ -4,7 +4,8 @@ Base URL: `http://127.0.0.1:3000` (configurable via `PORT`/`HOST`).
 
 All bodies are JSON. Validation and business errors return
 `{ "error": string, "message": string }` with no stack traces. Unknown routes
-return 404 `{ "error": "not_found" }`. Any 5xx returns
+return 404 `{ "error": "not_found" }`. Bodies over 64 KiB return 413 and
+clients over 120 req/min per IP return 429. Any 5xx returns
 `{ "error": "internal_error", "message": "Internal error" }` — internals are
 never leaked.
 

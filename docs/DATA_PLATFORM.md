@@ -33,10 +33,13 @@ restartable via two `JobCheckpoint` cursors:
 - `rollup:status-events` — new `ObservationStatusEvent.id`s, so a status flip
   (e.g. QUARANTINED→CORROBORATED) re-rolls the affected day
 
-Each batch collects distinct (listingId, day) pairs, recomputes them from raw
-rows, upserts, and advances both cursors — all in one transaction, so a crash
-at any point resumes cleanly. A day whose eligible set becomes empty has its
-rollup row deleted.
+Each batch collects distinct (listingId, day) pairs and recomputes them in ONE
+set-based statement (`unnest` pairs → aggregate → `INSERT … ON CONFLICT` →
+delete emptied days), upserts, and advances both cursors — all in one
+transaction, so a crash at any point resumes cleanly. A day whose eligible set
+becomes empty has its rollup row deleted. Measured ~8,700 listing-days/s at 5M
+observations (see `docs/PERFORMANCE_BASELINE.md`); a single-warehouse analytics
+store is a FUTURE option (`docs/adr/ADR-future-clickhouse.md`).
 
 CLI: `pnpm --filter @pricetruth/api jobs rollup [--batch-size 5000]`.
 

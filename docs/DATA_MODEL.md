@@ -1,7 +1,9 @@
 # Data Model (V1)
 
 Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
-`apps/api/prisma/migrations`.
+`apps/api/prisma/migrations` (in order): `init`, `data_foundation`,
+`catalog_identity`, `catalog_identity_model_backfill`, `observation_trust`,
+`daily_rollup`, `archive_batches`.
 
 ## Entities
 

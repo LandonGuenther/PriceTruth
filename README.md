@@ -52,13 +52,16 @@ tables; "current price" is always derived from the newest eligible observation.
   [docs/SCORING.md](docs/SCORING.md) · [docs/EXTENSION.md](docs/EXTENSION.md) ·
   [docs/PRIVACY.md](docs/PRIVACY.md) · [docs/CATALOG_IDENTITY.md](docs/CATALOG_IDENTITY.md) ·
   [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md) · [docs/DATA_PLATFORM.md](docs/DATA_PLATFORM.md) · [docs/ARCHIVE_FORMAT.md](docs/ARCHIVE_FORMAT.md)
+- [docs/SECURITY.md](docs/SECURITY.md) · [docs/PERFORMANCE_BASELINE.md](docs/PERFORMANCE_BASELINE.md) ·
+  [docs/SCALE_TRIGGERS.md](docs/SCALE_TRIGGERS.md)
 - ADRs: [observation immutability](docs/adr/ADR-001-observation-immutability.md) ·
   [identifiers & types](docs/adr/ADR-002-identifiers-and-database-types.md) ·
   [provenance](docs/adr/ADR-003-provenance.md) ·
   [client vs server time](docs/adr/ADR-004-client-time-vs-server-time.md) ·
   [catalog identity](docs/adr/ADR-005-catalog-identity.md) ·
   [data quality](docs/adr/ADR-006-data-quality.md) ·
-  [archive format](docs/adr/ADR-007-archive-format.md)
+  [archive format](docs/adr/ADR-007-archive-format.md) ·
+  [future ClickHouse](docs/adr/ADR-future-clickhouse.md)
 - Migration notes: [docs/migrations/2026-09-data-foundation.md](docs/migrations/2026-09-data-foundation.md)
 
 ### API quickstart
@@ -69,6 +72,16 @@ cp .env.example .env
 pnpm --filter @pricetruth/api db:migrate   # apply migrations
 pnpm --filter @pricetruth/api db:seed      # seed retailers (idempotent; also lazy)
 pnpm --filter @pricetruth/api start        # serves on 127.0.0.1:3000
+```
+
+Ops scripts (same package):
+
+```sh
+pnpm --filter @pricetruth/api jobs rollup                 # incremental daily rollup
+pnpm --filter @pricetruth/api jobs archive --dir <path>   # parquet export
+pnpm --filter @pricetruth/api catalog show|link|unlink    # identity corrections
+pnpm --filter @pricetruth/api loadgen --observations N    # disposable *_load DBs only
+pnpm --filter @pricetruth/api bench                       # latency + EXPLAIN suite
 ```
 
 ### Extension quickstart
