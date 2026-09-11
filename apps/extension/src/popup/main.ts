@@ -1,35 +1,53 @@
 /**
- * Action popup: open the side panel, then close.
+ * Action popup entry.
  *
- * Chrome's `setPanelBehavior({ openPanelOnActionClick })` and
- * `action.onClicked` + `sidePanel.open` are both flaky when the MV3 service
- * worker is a large ES module (import failure / kill-before-register → click
- * does nothing). Opening from this popup runs in a real user-gesture page
- * context and is the reliable path.
+ * Prefer Chrome/Edge side panel when `chrome.sidePanel.open` works. Opera
+ * (and some Chromium forks) lack or break that API - fall back to rendering
+ * the same panel UI inside this popup so the toolbar icon still works.
  */
-async function openSidePanel(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id != null) {
-    await chrome.sidePanel.open({ tabId: tab.id });
-    return;
+
+function sidePanelApiAvailable(): boolean {
+  return typeof chrome.sidePanel?.open === "function";
+}
+
+async function tryOpenSidePanel(): Promise<boolean> {
+  if (!sidePanelApiAvailable()) return false;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id != null) {
+      await chrome.sidePanel.open({ tabId: tab.id });
+      return true;
+    }
+    if (tab?.windowId != null) {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
   }
-  if (tab?.windowId != null) {
-    await chrome.sidePanel.open({ windowId: tab.windowId });
-    return;
-  }
-  throw new Error("No active tab to attach the side panel to");
+}
+
+async function mountFallbackPanel(): Promise<void> {
+  document.documentElement.classList.add("pt-popup-fallback");
+  const root = document.getElementById("root");
+  if (!root) throw new Error("PriceTruth popup root element missing");
+  const { mountPanel } = await import("../sidepanel/mount.js");
+  mountPanel(root);
 }
 
 void (async () => {
-  try {
-    await openSidePanel();
+  if (await tryOpenSidePanel()) {
     window.close();
+    return;
+  }
+  try {
+    await mountFallbackPanel();
   } catch {
-    // Keep the popup open with an error so a failed click is visible instead
-    // of "nothing happened".
+    document.documentElement.classList.add("pt-popup-fallback");
     document.body.style.cssText =
-      "margin:12px;width:260px;font:13px/1.4 system-ui,sans-serif;color:#111";
+      "margin:12px;width:280px;font:13px/1.4 system-ui,sans-serif;color:#111";
     document.body.textContent =
-      "PriceTruth could not open the side panel. Use Chrome 114+ and click again from a normal tab (not chrome:// pages).";
+      "PriceTruth could not open. Reload the extension on opera://extensions and try again from an Amazon or Best Buy product page.";
   }
 })();

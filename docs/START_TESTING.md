@@ -5,20 +5,22 @@
 | Item | Value |
 |------|-------|
 | API hostname | `https://pricetruth-api-staging.fly.dev` |
-| Beta ZIP | `apps/extension/release/pricetruth-extension-0.1.1.zip` |
-| Extension version | `0.1.1` |
+| Beta ZIP | `apps/extension/release/pricetruth-extension-0.1.2.zip` |
+| Extension version | `0.1.2` |
 | Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| ZIP SHA-256 | `71704712873a03c9a4e6aeafcea3ac5a118594d5b8e0b44ff299b0561bcaa4fb` |
+| ZIP SHA-256 | `ca57839773346e69d5ee684617d7ccf0f08b10d5be511aad094cd9d7cdb86c25` |
 
-## Install (Chrome)
+## Install (Chrome / Opera / Edge)
 
-1. Unzip `pricetruth-extension-0.1.1.zip`.
-2. Open `chrome://extensions`.
+1. Unzip `pricetruth-extension-0.1.2.zip`.
+2. Open the extensions page (`chrome://extensions`, `opera://extensions`, or `edge://extensions`).
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the unzipped folder (contains `manifest.json`).
-5. Confirm the extension id is `hkpcfcjmogoaakoemandjkkdgnhpdejk`.
+5. Confirm the extension id is `hkpcfcjmogoaakoemandjkkdgnhpdejk` and version is **0.1.2**.
 6. Open an Amazon or Best Buy product detail page (PDP).
-7. Click the PriceTruth toolbar icon (solid blue square) to open the side panel.
+7. Click the PriceTruth toolbar icon (solid blue square).
+   - Chrome / Edge: side panel opens on the right.
+   - Opera: PriceTruth UI opens in the toolbar popup (Opera has no Chrome side panel API).
 8. Confirm the visible page price matches what PriceTruth shows.
 9. Confirm an observation landed:
 
@@ -45,8 +47,10 @@ Expect health and readiness HTTP 200. Unauthenticated `/internal/status` must no
 
 | Symptom | Check |
 |---------|-------|
-| Toolbar icon (blue square) click does nothing | Remove the old unpacked extension, load the new ZIP contents, click **Reload** on `chrome://extensions`, then pin PriceTruth and click the icon again |
+| Toolbar icon (blue square) click does nothing | You must be on **version 0.1.2**. Remove every PriceTruth entry, load the new unzipped folder, confirm version **0.1.2**, pin the icon, open an Amazon/Best Buy PDP, then click |
+| Opera: side panel error / no Chrome side panel | Expected on Opera: 0.1.2 opens the PriceTruth UI in the toolbar popup instead (Opera lacks Chrome's side panel API) |
 | Side panel opens but is blank | Confirm `sidepanel.html` asset paths are relative (`./sidepanel.js`); rebuild if you still see `/sidepanel.js` |
+| Click works only as a brief flash (Chrome/Edge) | Expected: popup closes immediately after opening the side panel on the right |
 | Side panel empty / network error | Rebuild with `VITE_API_BASE_URL=https://pricetruth-api-staging.fly.dev` |
 | CORS / blocked fetch | Fly secret `ALLOWED_EXTENSION_IDS` must include `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
 | Readiness 503 | Neon connectivity or pending migrations |
