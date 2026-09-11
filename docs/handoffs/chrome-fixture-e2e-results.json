@@ -33,11 +33,11 @@
       "pass": true,
       "detail": {
         "keys": [
-          "tab:594546828"
+          "tab:689328428"
         ],
         "tabStates": [
           {
-            "key": "tab:594546828",
+            "key": "tab:689328428",
             "status": "ready",
             "externalId": "B0DEMOASIN"
           }
@@ -86,28 +86,28 @@
         "obsB": "1",
         "tabEntries": [
           {
-            "key": "tab:594546828",
+            "key": "tab:689328428",
             "status": "ready",
             "id": "B0TYPICALX"
           },
           {
-            "key": "tab:594546829",
+            "key": "tab:689328429",
             "status": "idle"
           },
           {
-            "key": "tab:594546831",
+            "key": "tab:689328431",
             "status": "idle"
           },
           {
-            "key": "tab:594546833",
+            "key": "tab:689328433",
             "status": "idle"
           },
           {
-            "key": "tab:594546835",
+            "key": "tab:689328435",
             "status": "idle"
           },
           {
-            "key": "tab:594546837",
+            "key": "tab:689328437",
             "status": "idle"
           }
         ]

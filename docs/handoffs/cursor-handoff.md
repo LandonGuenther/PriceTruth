@@ -14,8 +14,7 @@
 
 ## New Cursor head SHA
 
-`3cec7352b8864d541b6723904a204fb62d5d04de` (branch tip)
-
+`PENDING_TIP` (branch tip)
 ## Branch
 
 `cursor/public-beta-extension`
@@ -54,6 +53,8 @@ Backend owns trust/quarantine; extension owns safe extraction.
 
 Extension-owned correctness, packaging gates, and local Chrome fixture E2E against API+Postgres all pass. No known code blockers in Cursor-owned surfaces.
 
+Fresh re-verification 2026-09-11 (this agent turn): Chrome fixture E2E `ALL_PASS` (11/11); `pnpm lint` / `typecheck` / `test` / `build` exit 0.
+
 ## BETA RELEASE STATUS: BLOCKED
 
 Limited public beta is not release-ready until ops staging URL exists and live-retailer PDP validation is signed off. Missing staging URL is an ops/release blocker, not a code failure.
@@ -64,8 +65,8 @@ Limited public beta is not release-ready until ops staging URL exists and live-r
 | --- | --- |
 | Extension | **50** passed |
 | Retailer adapters | **115** passed |
-| Amazon fixtures | **23** |
-| Best Buy fixtures | **15** |
+| Amazon fixtures | **23** (within adapters) |
+| Best Buy fixtures | **15** (within adapters) |
 | Shared / catalog / scoring | 17 / 16 / 39 passed |
 | API | **132** passed (includes migration Path A/B) |
 | `pnpm lint` | pass |
@@ -73,49 +74,47 @@ Limited public beta is not release-ready until ops staging URL exists and live-r
 | `pnpm build` | pass |
 | `pnpm test` (full monorepo) | **pass** |
 
-Note: full `pnpm test` truncates the DEV API database. Re-run fixture Chrome E2E after gates if DB evidence is needed.
+Note: full `pnpm test` truncates the DEV API database. Re-run fixture Chrome E2E after gates if DB evidence is needed. Chrome E2E in this turn was run **before** the gate re-run and passed.
 
 ## Package verification
 
 - `VITE_API_BASE_URL=https://api-staging.pricetruth.example pnpm --filter @pricetruth/extension build && package && verify-package`
-- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip` (12 entries, 90783 bytes)
+- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip`
 - Permissions: `['sidePanel', 'storage']`; host_permissions: `['https://api-staging.pricetruth.example/*']`
 - Clean of localhost, `.env`, secrets, tests, fixtures, `node_modules`, source maps
 - Stable extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`
 
 ## Chrome unpacked fixture E2E (local API + Postgres) — PASS
 
-Method: Chrome for Testing 153 + puppeteer-core `pipe: true` + `Extensions.loadUnpacked` (branded Chrome 148 removed `--load-extension`; CDP loadUnpacked requires `--enable-unsafe-extension-debugging` + remote-debugging-pipe).
+Method: Chrome for Testing + puppeteer-core `pipe: true` + `Extensions.loadUnpacked` (branded Chrome 148 removed `--load-extension`; CDP loadUnpacked requires `--enable-unsafe-extension-debugging` + remote-debugging-pipe).
 
 Fixture HTTPS on `:443` via setcap node; `--host-resolver-rules` maps amazon.com / bestbuy.com to `127.0.0.1`; `--ignore-certificate-errors`.
 
-Extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`. Dist host_permissions: `http://127.0.0.1:3000/*`.
+Extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`. Dist host_permissions for E2E: `http://127.0.0.1:3000/*`.
 
-Checklist:
+Checklist (re-run 2026-09-11, `/opt/cursor/artifacts/chrome-fixture-e2e-results.json`):
 
 | Check | Result |
 | --- | --- |
 | Extension installs (loadUnpacked) | PASS |
 | Side panel opens | PASS |
-| Amazon fixture `B0DEMOASIN` extracts ($299 / list $499) | PASS |
-| Best Buy fixture `6418599` extracts ($279.99 / was $399.99) | PASS |
-| Observation reaches API/DB | PASS (amazon 29900, bestbuy 27999, B0TYPICALX 4499) |
-| Analysis returns | PASS (`confidence.level=INSUFFICIENT`, dealScore present) |
-| Side panel updates | PASS (ready states for A/BB/B; ambiguous UI) |
-| Ambiguous `B0AMBIGPR1` never POSTs | PASS (DB count stayed 0; panel: nothing recorded) |
+| Amazon fixture `B0DEMOASIN` extracts | PASS (`Acme Demo Widget 3000`) |
+| Best Buy fixture `6418599` extracts | PASS (`Acme 55" TV`) |
+| Observation reaches API/DB | PASS (amazon + bestbuy ingest counts > 0) |
+| Analysis returns | PASS (`confidence=INSUFFICIENT`, deal score present on amazon) |
+| Side panel updates | PASS (tab state `ready` / `B0DEMOASIN`) |
+| Ambiguous `B0AMBIGPR1` never POSTs | PASS (DB count 0; panel status `ambiguous`) |
 | Nav Product A → B no stale A | PASS (tab state `B0TYPICALX` ready; not showing `B0DEMOASIN`) |
 
-Artifacts (agent run):
+Artifacts:
 
 - `/opt/cursor/artifacts/chrome-fixture-e2e-results.json` (`ALL_PASS`)
-- `/opt/cursor/artifacts/e2e-db-evidence.txt`
-- `/opt/cursor/artifacts/panel_amazon_ready.png`
-- `/opt/cursor/artifacts/panel_bestbuy_ready.png`
-- `/opt/cursor/artifacts/panel_ambiguous.png`
-- `/opt/cursor/artifacts/panel_product_b_ready.png`
-- `/opt/cursor/artifacts/chrome_fixture_e2e_full_checklist.mp4`
-- `/opt/cursor/artifacts/sidepanel_amazon_bestbuy_ready_states.mp4`
-- `/opt/cursor/artifacts/repo-gates.log`
+- `/opt/cursor/artifacts/e2e_sidepanel_after_amazon.png`
+- `/opt/cursor/artifacts/e2e_sidepanel_after_bestbuy.png`
+- `/opt/cursor/artifacts/e2e_sidepanel_ambiguous.png`
+- `/opt/cursor/artifacts/e2e_sidepanel_after_product_b.png`
+- `/opt/cursor/artifacts/chrome_fixture_e2e_full_checklist.mp4` (prior full checklist recording)
+- `/opt/cursor/artifacts/repo-gates-rerun.log`
 
 ## Production / staging endpoint status
 
@@ -145,8 +144,6 @@ Artifacts (agent run):
 
 Keep PR #8 **draft** while RELEASE/OPS + MANUAL LIVE-RETAILER items remain. Do not merge from the agent.
 
-`gh` cannot update PR bodies in this environment (read-only integration). Handoff in-repo is the durable status record; parent agent should refresh PR #8 summary from this file if ManagePullRequest is available.
-
 ## Do not merge order
 
-Devin main already merged. Cursor PR merges after release/ops staging URL + live PDP sign-off and reviewer approval.
+Do not merge until CODE stays green and RELEASE/OPS + MANUAL LIVE-RETAILER are cleared by the owner.
