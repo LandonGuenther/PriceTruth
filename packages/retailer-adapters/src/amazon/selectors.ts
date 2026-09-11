@@ -11,23 +11,30 @@ export const AMAZON_SELECTORS = {
   dpDataAsin: "#dp[data-asin]",
   /** Any element carrying a data-asin attribute (fallback). */
   anyDataAsin: "[data-asin]",
-  /** Detail bullets list items — scanned for the "ASIN" label. */
+  /** Detail bullets list items - scanned for the "ASIN" label. */
   detailBullets: "#detailBullets li, #detailBullets_feature_div li",
   /**
-   * Price candidates, in priority order. `.a-offscreen` spans carry the
-   * screen-reader copy of a visually-split price ("$299.00").
+   * Buy-box / core price containers. Price queries MUST be scoped to these
+   * roots - never take the first global `.a-price` / `.a-price-whole`.
    */
-  price: [
-    "#corePriceDisplay_desktop_feature_div .priceToPay .a-offscreen",
-    "#corePrice_feature_div .a-price .a-offscreen",
-    "#apex_desktop .priceToPay .a-offscreen",
-    "#priceblock_ourprice",
-    "#priceblock_dealprice",
-    "#corePrice_desktop .a-price .a-offscreen",
+  priceRoots: [
+    "#corePriceDisplay_desktop_feature_div",
+    "#corePrice_feature_div",
+    "#apex_desktop",
+    "#corePrice_desktop",
   ],
-  /** Split-price fallback: whole and fractional parts rendered separately. */
+  /**
+   * Within a price root, prefer `.priceToPay .a-offscreen`, then `.a-price
+   * .a-offscreen`. Legacy priceblock ids are also accepted as whole-document
+   * (but non-global-class) fallbacks.
+   */
+  priceToPayOffscreen: ".priceToPay .a-offscreen",
+  priceOffscreen: ".a-price .a-offscreen",
+  legacyPrice: ["#priceblock_ourprice", "#priceblock_dealprice"],
+  /** Split-price parts - must be resolved under the same `.a-price` ancestor. */
   priceWhole: ".a-price-whole",
   priceFraction: ".a-price-fraction",
+  aPrice: ".a-price",
   /**
    * Reference ("List Price" / "Typical price") candidates, in priority order.
    * `.basisPrice` holds the strike-through basis price in the core price block.

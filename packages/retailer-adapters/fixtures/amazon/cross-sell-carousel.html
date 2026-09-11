@@ -1,0 +1,26 @@
+<!--
+  Sanitized fixture: buy-box price with a cross-sell carousel that appears
+  earlier in the DOM. Carousel prices must never win.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0CAROUSEL">
+      <input type="hidden" id="ASIN" value="B0CAROUSEL" />
+      <span id="productTitle">Acme Carousel Camera</span>
+      <div id="sp_detail" class="a-carousel" data-testid="sponsored-carousel">
+        <div class="a-carousel-card">
+          <span class="a-price"><span class="a-offscreen">$12.99</span></span>
+        </div>
+        <div class="a-carousel-card">
+          <span class="a-price"><span class="a-offscreen">$8.50</span></span>
+        </div>
+      </div>
+      <div id="corePriceDisplay_desktop_feature_div">
+        <span class="basisPrice"><span class="a-offscreen">$449.00</span></span>
+        <span class="priceToPay"><span class="a-offscreen">$349.00</span></span>
+      </div>
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>
