@@ -1,6 +1,8 @@
 # Staging deployment
 
-Status: IN PROGRESS (Fly.io target; blocked on deploy secrets in the Cursor agent)
+Status: IN PROGRESS (Fly.io target; blocked on `FLY_API_TOKEN` + `DATABASE_URL` in the Cursor agent)
+
+See also: `docs/LIVE_BETA_REPORT.md`, `docs/START_TESTING.md`, `docs/COSTS.md`.
 
 ## Target shape
 
