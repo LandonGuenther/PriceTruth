@@ -38,13 +38,15 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='pricetruth'
 pnpm install --frozen-lockfile
 pnpm --filter @pricetruth/api prisma:generate
 
-# 6. Apply migrations and seed retailers (both idempotent).
+# 6. Build all workspace packages, apps, and the extension bundle.
+#    This must run before db:seed because prisma/seed.ts imports the compiled
+#    @pricetruth/shared output (packages/shared/dist).
+pnpm build
+
+# 7. Apply migrations and seed retailers (both idempotent).
 set -a
 # shellcheck disable=SC1091
 source .env
 set +a
 pnpm --filter @pricetruth/api exec prisma migrate deploy
 pnpm --filter @pricetruth/api db:seed
-
-# 7. Build all workspace packages, apps, and the extension bundle.
-pnpm build
