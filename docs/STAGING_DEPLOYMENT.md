@@ -1,29 +1,40 @@
 # Staging deployment
 
-Status: PLANNED (workflow scaffold exists; no staging host provisioned yet)
+Status: IN PROGRESS (Fly.io target; blocked on deploy secrets in the Cursor agent)
 
 ## Target shape
 
-- Postgres 16 (managed or container) with its own volume.
-- API from `apps/api/Dockerfile` (`pricetruth-api:<sha>`), port 3000 behind a
-  TLS-terminating proxy; `TRUST_PROXY` set to match the proxy hop count.
-- `NODE_ENV=staging`, `HOST=0.0.0.0`, `LOG_LEVEL=info`.
-- Secrets via the platform's secret store: `DATABASE_URL`,
-  `INTERNAL_API_TOKEN` (≥32 chars), `BESTBUY_API_KEY` (optional),
-  `ALLOWED_EXTENSION_IDS` (pinned extension id), `CORS_ORIGINS` if needed.
-- Archive to object storage: `ARCHIVE_BACKEND=s3` + `S3_*` vars.
+- Neon Postgres 16 (`pricetruth-staging`, us-east-1) - existing project; do not recreate.
+- API on Fly.io from `apps/api/Dockerfile` via root `fly.toml`.
+- App name: `pricetruth-api-staging` (or nearest available).
+- Region: `iad` (near Neon us-east-1).
+- Machine: `shared-cpu-1x` / 256 MB; `auto_stop_machines = "off"`; `min_machines_running = 1`.
+- HTTPS via Fly proxy; internal port 3000; health check `GET /health`.
+- `NODE_ENV=staging`, `HOST=0.0.0.0`, `LOG_LEVEL=info`, `TRUST_PROXY=true`.
+- Secrets via Fly secret store: `DATABASE_URL`, `INTERNAL_API_TOKEN` (≥32 chars),
+  `ALLOWED_EXTENSION_IDS` (pinned id `hkpcfcjmogoaakoemandjkkdgnhpdejk`),
+  `BESTBUY_API_KEY` (optional), `ARCHIVE_BACKEND=local`, `ARCHIVE_LOCAL_DIR=/data/archive`.
+- Archive: local on a 1 GB Fly volume (`pricetruth_archive` → `/data`). R2 is a
+  follow-up (previous Cloudflare token was invalid).
+- Release command: `pnpm exec prisma migrate deploy` before traffic switch.
 
 ## Deploy steps
 
-1. `docker build -f apps/api/Dockerfile --build-arg APP_VERSION=<sha> -t pricetruth-api:<sha> .`
-2. Push to the registry; on the host run migrations first:
-   `docker run --rm -e DATABASE_URL=... pricetruth-api:<sha> pnpm exec prisma migrate deploy`
-3. Start the container; confirm `GET /readiness` → 200 (`migrations: ok`).
-4. Smoke: `POST /v1/observations` with a synthetic observation, then
-   `GET /internal/status` with the ops token.
+1. Ensure Fly auth: `FLY_API_TOKEN` in the agent/CI environment.
+2. `fly apps create pricetruth-api-staging --org <org>` (once).
+3. `fly secrets set DATABASE_URL=... INTERNAL_API_TOKEN=... ALLOWED_EXTENSION_IDS=hkpcfcjmogoaakoemandjkkdgnhpdejk ARCHIVE_BACKEND=local ARCHIVE_LOCAL_DIR=/data/archive`
+4. `fly deploy --build-arg APP_VERSION=<git-sha>`
+5. Confirm `GET https://pricetruth-api-staging.fly.dev/health` and `/readiness` → 200.
+6. Smoke: synthetic observation POST, then `pnpm ops:status` with `PRICETRUTH_API_URL`.
+
+## Scheduled jobs
+
+- `.github/workflows/staging-canary.yml` - health/readiness (+ optional internal status).
+  Needs GitHub secrets: `STAGING_API_URL`, `STAGING_INTERNAL_API_TOKEN`.
+- `.github/workflows/staging-jobs.yml` - rollup / archive / bestbuy-refresh via
+  `fly ssh console`. Needs GitHub secrets: `FLY_API_TOKEN`, optional `FLY_APP_NAME`.
 
 ## CI hook
 
-`.github/workflows/deploy-staging.yml` is a `workflow_dispatch` scaffold —
-it builds the image and prints the runbook; the actual registry-push/host steps
-are filled in once the staging host exists.
+`.github/workflows/deploy-staging.yml` remains a `workflow_dispatch` scaffold for
+image build notes; live deploys are done with `fly deploy` from this repo root.
