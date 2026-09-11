@@ -15,5 +15,8 @@ export default defineConfig({
   test: {
     globalSetup: ["./test/globalSetup.ts"],
     testTimeout: 30_000,
+    // All API tests share one Postgres and truncate it; files must run
+    // sequentially or a mid-test TRUNCATE in a sibling file corrupts state.
+    fileParallelism: false,
   },
 });
