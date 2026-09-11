@@ -1,0 +1,36 @@
+<!--
+  Sanitized fixture: very thin PDP DOM where the customer price lives mainly in
+  a JSON-LD Product Offer. Adapter must fall back to JSON-LD when buy-box roots
+  have no parseable price.
+-->
+<!doctype html>
+<html>
+  <head>
+    <title>Acme JSON-LD Fallback Mug</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Acme JSON-LD Fallback Mug",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "sku": "B0JSONLDFB",
+        "offers": {
+          "@type": "Offer",
+          "price": "24.95",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="dp" data-asin="B0JSONLDFB">
+      <input type="hidden" id="ASIN" value="B0JSONLDFB" />
+      <span id="productTitle">Acme JSON-LD Fallback Mug</span>
+      <div id="corePriceDisplay_desktop_feature_div">
+        <!-- Intentionally empty: price only in JSON-LD -->
+      </div>
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,36 @@
+<!--
+  Sanitized fixture: identity comes from JSON-LD sku only. No data-sku-id and
+  no visible SKU label; new-format URL carries an opaque product code.
+-->
+<!doctype html>
+<html>
+  <head>
+    <title>Acme JSON-LD SKU Keyboard</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Acme JSON-LD SKU Keyboard",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "model": "AC-KB-1",
+        "sku": "6688444",
+        "offers": {
+          "@type": "Offer",
+          "price": "69.99",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "sku": "6688444"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme JSON-LD SKU Keyboard</h1>
+    <div data-testid="price-block">
+      <div data-testid="price-block-customer-price">
+        <span class="sr-only">$69.99</span>
+      </div>
+    </div>
+    <button data-testid="pdp-add-to-cart-6688444" type="button">Add to cart</button>
+  </body>
+</html>

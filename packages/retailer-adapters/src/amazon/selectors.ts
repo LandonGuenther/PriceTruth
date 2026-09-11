@@ -13,6 +13,8 @@ export const AMAZON_SELECTORS = {
   anyDataAsin: "[data-asin]",
   /** Detail bullets list items - scanned for the "ASIN" label. */
   detailBullets: "#detailBullets li, #detailBullets_feature_div li",
+  /** Embedded JSON-LD blocks; scanned for @type "Product" offers.price. */
+  jsonLd: 'script[type="application/ld+json"]',
   /**
    * Buy-box / core price containers. Price queries MUST be scoped to these
    * roots - never take the first global `.a-price` / `.a-price-whole`.

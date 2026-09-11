@@ -193,6 +193,57 @@ describe("extract", () => {
     if (input) input.value = "B0OTHERASI";
     expect(amazonAdapter.extractExternalId(productUrl("B0DEMOASIN"), doc)).toBe("B0DEMOASIN");
   });
+
+  it("Prime / member styling still yields buy-box priceToPay", () => {
+    const doc = loadFixture("prime-member-display.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0PRIMEMEM"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(8999);
+    expect(r.observation.referencePriceCents).toBe(12900);
+    expect(r.meta.priceMethod).toMatch(/priceToPay/);
+    expect(r.meta.priceConfidence).toBe("HIGH");
+  });
+
+  it("see-all-buying-options wall → no_price (not other-seller prices)", () => {
+    const doc = loadFixture("all-buying-options.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0ALLBUYOP"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.meta?.priceConfidence).toBe("LOW");
+  });
+
+  it("thin DOM falls back to JSON-LD Product Offer price", () => {
+    const doc = loadFixture("jsonld-fallback.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0JSONLDFB"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(2495);
+    expect(r.observation.title).toBe("Acme JSON-LD Fallback Mug");
+    expect(r.meta.priceMethod).toBe("jsonld_offers_price");
+    expect(r.meta.priceConfidence).toBe("MEDIUM");
+  });
+
+  it("minimal thin render extracts core a-price", () => {
+    const doc = loadFixture("minimal-thin-render.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0MINITHIN"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(1249);
+    expect(r.observation.title).toBe("Acme Thin Shell Notebook");
+    expect(r.observation.referencePriceCents).toBeUndefined();
+    expect(r.meta.priceMethod).toMatch(/a-price/);
+  });
+
+  it("coupon badge plus carousel never displace buy-box price", () => {
+    const doc = loadFixture("coupon-with-carousel.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0COUPCARO"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(5900);
+    expect(r.observation.referencePriceCents).toBe(7900);
+  });
 });
 
 describe("selector coverage", () => {

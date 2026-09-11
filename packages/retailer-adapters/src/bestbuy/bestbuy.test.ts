@@ -265,6 +265,55 @@ describe("extract", () => {
     expect(r.observation.referencePriceCents).toBe(4499);
     expect(r.warnings).toContain("marketplace badge present");
   });
+
+  it("legacy /site/.../sku.p URL with matching page SKU", () => {
+    const doc = loadFixture("legacy-site-url.html");
+    const url = new URL("https://www.bestbuy.com/site/acme-headphones/6577123.p?skuId=6577123");
+    expect(bestbuyAdapter.matchesUrl(url)).toBe(true);
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6577123");
+    expect(r.observation.priceCents).toBe(12999);
+    expect(r.observation.referencePriceCents).toBe(15999);
+    expect(r.meta.identityMethod).toBe("data_sku_id");
+  });
+
+  it("identity from JSON-LD sku when DOM has no sku attributes", () => {
+    const doc = loadFixture("jsonld-sku.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-keyboard/ABCD1234XY");
+    expect(bestbuyAdapter.extractExternalId(url, doc)).toBe("6688444");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6688444");
+    expect(r.observation.priceCents).toBe(6999);
+    expect(r.meta.identityMethod).toBe("jsonld_sku");
+    expect(r.meta.identityConfidence).toBe("HIGH");
+  });
+
+  it("visible SKU: label fallback when JSON-LD is absent", () => {
+    const doc = loadFixture("visible-sku-label.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-mouse/EFGH5678ZZ");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6701122");
+    expect(r.observation.priceCents).toBe(3499);
+    expect(r.observation.referencePriceCents).toBe(4499);
+    expect(r.meta.identityMethod).toBe("sku_label");
+  });
+
+  it("configuration selector tiles do not leak alternate prices", () => {
+    const doc = loadFixture("variant-configuration.html");
+    const url = new URL("https://www.bestbuy.com/site/acme-monitor/6555001.p?skuId=6555001");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6555001");
+    expect(r.observation.priceCents).toBe(32999);
+    expect(r.observation.referencePriceCents).toBe(39999);
+  });
 });
 
 describe("findAdapter", () => {

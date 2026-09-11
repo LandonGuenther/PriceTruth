@@ -1,0 +1,34 @@
+<!--
+  Sanitized fixture: buy-box price plus both a coupon badge and a sponsored
+  carousel. Coupon and carousel amounts must never replace the buy-box price.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0COUPCARO">
+      <input type="hidden" id="ASIN" value="B0COUPCARO" />
+      <span id="productTitle">Acme Coupon Carousel Lamp</span>
+
+      <div id="sp_detail" class="a-carousel" data-testid="sponsored-carousel">
+        <div class="a-carousel-card">
+          <span class="a-price"><span class="a-offscreen">$9.99</span></span>
+        </div>
+        <div class="a-carousel-card">
+          <span class="a-price"><span class="a-offscreen">$14.50</span></span>
+        </div>
+      </div>
+
+      <div id="corePriceDisplay_desktop_feature_div">
+        <span class="basisPrice"><span class="a-offscreen">$79.00</span></span>
+        <span class="priceToPay"><span class="a-offscreen">$59.00</span></span>
+      </div>
+
+      <div id="vpcButton" class="couponBadge promoPriceBlock">
+        <span class="a-color-success">Save $10.00 with coupon</span>
+        <span class="a-price couponPrice"><span class="a-offscreen">$10.00</span></span>
+      </div>
+
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>

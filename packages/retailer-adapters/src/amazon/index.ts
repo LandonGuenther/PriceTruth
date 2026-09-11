@@ -17,10 +17,11 @@ const PATH_ID = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})/;
 
 /**
  * Ancestor id/class/testid patterns that must never contribute a primary price:
- * carousel / sponsored / used / SNS secondary / installment / coupon / shipping.
+ * carousel / sponsored / used / SNS secondary / installment / coupon / shipping /
+ * all-offers / OLP buying-options walls.
  */
 const CONTAMINATED =
-  /carousel|sponsored|sims-|sp_detail|accessory|cross.?sell|usedBuyBox|usedAccordion|olp-used|offer-display-feature.*used|subscribe.?and.?save|snsPrice|snsDetail|installment|apr\b|coupon|clip.?coupon|promoPriceBlock|shippingMessage|deliveryBlock|secondaryOffer|twisterPlusPrice|savings-coupon/i;
+  /carousel|sponsored|sims-|sp_detail|accessory|cross.?sell|usedBuyBox|usedAccordion|olp-used|olp_|aod-|all.?offers|buying.?options|offer-display-feature.*used|subscribe.?and.?save|snsPrice|snsDetail|installment|apr\b|coupon|clip.?coupon|promoPriceBlock|shippingMessage|deliveryBlock|secondaryOffer|twisterPlusPrice|savings-coupon/i;
 
 const INSTALLMENT_TEXT = /as low as|\/\s*mo(?:nth)?\b|apr\b|financ/i;
 const COUPON_TEXT = /coupon|save\s+\$?\d/i;
@@ -153,6 +154,46 @@ function collectLegacyPrices(doc: Document): PriceCandidate[] {
   return out;
 }
 
+interface JsonLdProduct {
+  offers?:
+    | { price?: string | number }
+    | Array<{ price?: string | number }>;
+}
+
+function findJsonLdProduct(doc: Document): JsonLdProduct | null {
+  for (const script of doc.querySelectorAll(S.jsonLd)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(script.textContent ?? "");
+    } catch {
+      continue;
+    }
+    const candidates = Array.isArray(parsed) ? parsed : [parsed];
+    for (const c of candidates) {
+      const graph: unknown[] = Array.isArray((c as { "@graph"?: unknown[] })?.["@graph"])
+        ? ((c as { "@graph": unknown[] })["@graph"] as unknown[])
+        : [c];
+      for (const node of graph) {
+        const type = (node as { "@type"?: string | string[] })?.["@type"];
+        const types = Array.isArray(type) ? type : [type];
+        if (types.includes("Product")) return node as JsonLdProduct;
+      }
+    }
+  }
+  return null;
+}
+
+function extractJsonLdPrice(doc: Document): PriceCandidate | null {
+  const product = findJsonLdProduct(doc);
+  const offers = product?.offers;
+  if (!offers) return null;
+  const first = Array.isArray(offers) ? offers[0] : offers;
+  if (first?.price === undefined) return null;
+  const cents = parseCents(String(first.price));
+  if (cents === null) return null;
+  return { cents, method: "jsonld_offers_price", priority: 50 };
+}
+
 type PriceOutcome =
   | { kind: "ok"; cents: number; method: string; confidence: ExtractionConfidence }
   | { kind: "ambiguous"; candidates: number[]; method: string }
@@ -176,6 +217,15 @@ function extractPrice(doc: Document, warnings: string[]): PriceOutcome {
   candidates.push(...collectLegacyPrices(doc));
 
   if (candidates.length === 0) {
+    const fromLd = extractJsonLdPrice(doc);
+    if (fromLd) {
+      return {
+        kind: "ok",
+        cents: fromLd.cents,
+        method: fromLd.method,
+        confidence: "MEDIUM",
+      };
+    }
     warnings.push("no price element matched");
     return { kind: "none" };
   }
