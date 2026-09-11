@@ -1,0 +1,28 @@
+<!--
+  Trimmed hand-built fixture modeled on Best Buy's product-page markup: JSON-LD
+  Product with no regular/"Was" price in the DOM. NOT a captured page.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div class="pdp" data-sku-id="6532187">
+      <h1>Acme Toaster</h1>
+      <div class="priceView-customer-price"><span>$49.99</span></div>
+    </div>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Acme Toaster",
+        "brand": "Acme",
+        "mpn": "AC-T2",
+        "sku": "6532187",
+        "offers": {
+          "@type": "Offer",
+          "price": 49.99,
+          "availability": "https://schema.org/InStock"
+        }
+      }
+    </script>
+  </body>
+</html>

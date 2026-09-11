@@ -1,0 +1,34 @@
+<!--
+  Trimmed hand-built fixture modeled on Best Buy's product-page markup: JSON-LD
+  Product block plus "Was" regular price. NOT a captured page.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div class="pdp" data-sku-id="6418599">
+      <h1>Acme 55" TV</h1>
+      <div class="priceView-customer-price"><span>$279.99</span></div>
+      <div class="pricing-price__regular-price">Was $399.99</div>
+      <div data-testid="regular-price">Was $399.99</div>
+      <div class="pricing-price__savings-regular-price">Reg $399.99</div>
+      <div class="sku"><span class="product-data-value">SKU: 6418599</span></div>
+    </div>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Acme 55\" 4K TV",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "model": "AC55-4K",
+        "gtin13": "0012345678905",
+        "sku": "6418599",
+        "offers": {
+          "@type": "Offer",
+          "price": "279.99",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock"
+        }
+      }
+    </script>
+  </body>
+</html>
