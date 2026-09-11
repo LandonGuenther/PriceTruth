@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import archiver from "archiver";
 import { PRODUCT_SLUG } from "@pricetruth/shared";
 import pkg from "../package.json" with { type: "json" };
+import { assertProductionApiUrl } from "./assert-production-api-url.js";
+
+// Production packaging must not ship a localhost API origin.
+assertProductionApiUrl(process.env.VITE_API_BASE_URL);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(here, "..");

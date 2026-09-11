@@ -60,7 +60,7 @@ describe("extract", () => {
       schemaVersion: 1,
       priceType: "STANDARD",
       referenceType: "UNKNOWN",
-      extractorVersion: "1.1.1",
+      extractorVersion: "1.2.0",
     });
   });
 
@@ -203,6 +203,66 @@ describe("extract", () => {
     const doc = loadFixture("dom-only-price.html");
     const plain = new URL("https://www.bestbuy.com/site/anything");
     expect(bestbuyAdapter.extractExternalId(plain, doc)).toBe("6401234");
+  });
+
+  it("Comp. Value DOM-only: customer price + reference", () => {
+    const doc = loadFixture("comp-value-dom-only.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-soundbar/JJCOMPVAL1");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("6578901");
+    expect(r.observation.priceCents).toBe(14999);
+    expect(r.observation.referencePriceCents).toBe(19999);
+  });
+
+  it("financing/month-only customer price → no_price", () => {
+    const doc = loadFixture("financing-month.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-tv/JJFINANCE01");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("financing/month price ignored");
+  });
+
+  it("open-box tile ignored; new cash price wins", () => {
+    const doc = loadFixture("open-box.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-headphones/JJOPENBOX01");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(12999);
+    expect(r.observation.referencePriceCents).toBe(15999);
+  });
+
+  it("bundle upsell tile ignored; product price wins", () => {
+    const doc = loadFixture("bundle-upsell.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-camera/JJBUNDLE001");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(89999);
+  });
+
+  it("JSON-LD vs DOM customer price conflict → ambiguous_price", () => {
+    const doc = loadFixture("jsonld-dom-price-conflict.html");
+    const url = new URL("https://www.bestbuy.com/product/acme-conflict/JJCONFLICT1");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("ambiguous_price");
+    expect(r.warnings).toContain("JSON-LD price conflicts with DOM price");
+  });
+
+  it("legacy marketplace listing: Comp. Value as reference", () => {
+    const doc = loadFixture("marketplace-legacy.html");
+    const r = bestbuyAdapter.extract(doc, pdp("6445001"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(5999);
+    expect(r.observation.referencePriceCents).toBe(7999);
+    expect(r.observation.externalId).toBe("6445001");
   });
 });
 

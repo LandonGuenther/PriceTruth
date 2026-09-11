@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { AnalysisResponse, HistoryResponse, RetailerObservation } from "@pricetruth/shared";
 import { OBSERVATION_SOURCES } from "@pricetruth/shared";
 import { Panel } from "./Panel.js";
+import { buildHistoryPath, filterDailyByWindow } from "./components.js";
+import { COPY } from "./copy.js";
 import type { TabState } from "../messages.js";
 
 const observation: RetailerObservation = {
@@ -63,6 +65,10 @@ const analysis: AnalysisResponse = {
     label: "Better than typical",
     reasons: ["180 observations across 180 days."],
   },
+  evidence: {
+    eligibleCount: 180,
+    excluded: { synthetic: 0, quarantined: 0, excluded: 0, priceType: 0 },
+  },
   computedAt: "2025-06-30T12:00:00.000Z",
 };
 
@@ -72,6 +78,9 @@ const history: HistoryResponse = {
   days: 180,
   points: [],
   daily: [
+    { day: "2025-06-01", medianPriceCents: 33000 },
+    { day: "2025-06-02", medianPriceCents: 32500 },
+    { day: "2025-06-10", medianPriceCents: 31000 },
     { day: "2025-06-29", medianPriceCents: 31900 },
     { day: "2025-06-30", medianPriceCents: 29900 },
   ],
@@ -84,27 +93,71 @@ const ready: TabState = {
   history,
   ingest: { accepted: true, duplicate: false },
   updatedAt: "2025-06-30T12:00:00.000Z",
+  generation: 1,
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  sessionStorage.clear();
+});
+
+describe("history path helpers", () => {
+  it("filters daily points by chart window without inventing days", () => {
+    const filtered = filterDailyByWindow(history.daily, "30");
+    expect(filtered.map((p) => p.day)).toEqual([
+      "2025-06-01",
+      "2025-06-02",
+      "2025-06-10",
+      "2025-06-29",
+      "2025-06-30",
+    ]);
+    const short = filterDailyByWindow(
+      [
+        { day: "2025-01-01", medianPriceCents: 100 },
+        { day: "2025-06-20", medianPriceCents: 200 },
+        { day: "2025-06-30", medianPriceCents: 300 },
+      ],
+      "30",
+    );
+    expect(short.map((p) => p.day)).toEqual(["2025-06-20", "2025-06-30"]);
+  });
+
+  it("breaks the SVG path across calendar gaps", () => {
+    const pts = [
+      { day: "2025-06-01", medianPriceCents: 100 },
+      { day: "2025-06-02", medianPriceCents: 110 },
+      { day: "2025-06-10", medianPriceCents: 120 },
+    ];
+    const path = buildHistoryPath(
+      pts,
+      (i) => i * 10,
+      (v) => v,
+    );
+    expect(path).toBe("M0.0,100.0 L10.0,110.0 M20.0,120.0");
+  });
+});
 
 describe("Panel", () => {
   it("ready state shows price, advertised discount, scores and labels", () => {
     render(<Panel state={ready} />);
     expect(screen.getByText("Acme Demo Widget 3000")).toBeTruthy();
-    expect(screen.getByText("$299.00")).toBeTruthy();
+    expect(screen.getAllByText("$299.00").length).toBeGreaterThan(0);
     expect(screen.getByText(/40% off store reference of \$499\.00/)).toBeTruthy();
     expect(screen.getByText(/~6\.3% below typical/)).toBeTruthy();
     expect(screen.getByText("9/100")).toBeTruthy();
     expect(screen.getByText("78/100")).toBeTruthy();
+    expect(screen.getByText("Discount Integrity")).toBeTruthy();
+    expect(screen.getByText("Deal Score")).toBeTruthy();
     expect(screen.getByText("Reference price not supported by our observations")).toBeTruthy();
     expect(screen.getByText("Better than typical")).toBeTruthy();
     expect(screen.getByText("High")).toBeTruthy();
     expect(screen.getByText("180 observations across 180 days")).toBeTruthy();
     expect(screen.getByText("ASIN B0DEMOASIN", { exact: false })).toBeTruthy();
+    expect(screen.getByText(COPY.tagline)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("—");
   });
 
-  it("INSUFFICIENT confidence hides numeric scores and shows the notice", () => {
+  it("INSUFFICIENT confidence shows learning card and hides ScoreCards", () => {
     const insuff: TabState = {
       ...ready,
       analysis: {
@@ -116,16 +169,46 @@ describe("Panel", () => {
           score: null,
           label: "Limited history",
         },
-        stats: { ...analysis.stats, observationCount: 1 },
+        stats: {
+          ...analysis.stats,
+          observationCount: 1,
+          oldestObservedAt: "2025-06-28T12:00:00.000Z",
+          median30Cents: null,
+          median90Cents: null,
+          median180Cents: null,
+          low90Cents: null,
+          recordedLowCents: null,
+        },
       },
     };
     render(<Panel state={insuff} />);
+    expect(screen.getByRole("heading", { name: COPY.learningTitle })).toBeTruthy();
+    expect(screen.getByText(COPY.learningBody)).toBeTruthy();
+    expect(screen.getByText("1 observation so far")).toBeTruthy();
+    expect(screen.getByText(/First observed/)).toBeTruthy();
     expect(screen.queryByText("9/100")).toBeNull();
     expect(screen.queryByText("78/100")).toBeNull();
+    expect(screen.queryByText("0/100")).toBeNull();
     expect(screen.queryAllByText(/\/100/)).toHaveLength(0);
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Limited history").length).toBeGreaterThan(0);
-    expect(screen.getByText(/has only 1 observation\(s\)/)).toBeTruthy();
+    expect(screen.queryByText("Discount Integrity")).toBeNull();
+    expect(screen.queryByText("Deal Score")).toBeNull();
+    expect(document.body.textContent).not.toContain("—");
+    expect(screen.getAllByText(COPY.notEnoughData).length).toBeGreaterThan(0);
+  });
+
+  it("history chart offers window controls and an accessible table fallback", () => {
+    render(<Panel state={ready} />);
+    const group = screen.getByRole("group", { name: COPY.chartWindowGroup });
+    expect(within(group).getByRole("button", { name: "30D" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "90D" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "180D" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "ALL" })).toBeTruthy();
+    fireEvent.click(within(group).getByRole("button", { name: "30D" }));
+    expect(within(group).getByRole("button", { name: "30D" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByText(COPY.historyTableSummary)).toBeTruthy();
+    expect(screen.getByText("2025-06-30")).toBeTruthy();
   });
 
   it("idle state prompts to open a supported product page", () => {
@@ -150,13 +233,83 @@ describe("Panel", () => {
           observation,
           message: "Could not reach the service.",
           updatedAt: "",
+          kind: "network",
         }}
         onRetry={() => (retried = true)}
       />,
     );
-    const btn = screen.getByText("Retry");
+    const btn = screen.getByRole("button", { name: "Retry" });
     expect(btn).toBeTruthy();
-    btn.click();
+    fireEvent.click(btn);
     expect(retried).toBe(true);
+  });
+
+  it("ambiguous state explains that nothing was recorded", () => {
+    render(
+      <Panel
+        state={{
+          status: "ambiguous",
+          retailer: "bestbuy",
+          url: "https://www.bestbuy.com/site/x/1.p",
+          warnings: [],
+          message: COPY.ambiguous,
+        }}
+      />,
+    );
+    expect(screen.getByText(COPY.ambiguous)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toMatch(/ambiguous/i);
+  });
+
+  it("exposes a Diagnostics toggle hidden by default", () => {
+    render(<Panel state={ready} />);
+    const toggle = screen.getByRole("button", { name: COPY.diagnostics });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText(COPY.diagnosticsApiBase)).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByText(COPY.diagnosticsApiBase)).toBeTruthy();
+    expect(screen.getByText("amazon")).toBeTruthy();
+    expect(screen.getByText("B0DEMOASIN")).toBeTruthy();
+    expect(screen.getByText("1.0.0")).toBeTruthy();
+  });
+
+  it("feedback looks-right and report-issue store a local session note only", () => {
+    render(<Panel state={ready} />);
+    expect(screen.getByText(COPY.feedbackPrompt)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: COPY.feedbackReport }));
+    const raw = sessionStorage.getItem("pt:price-feedback");
+    expect(raw).toBeTruthy();
+    const note = JSON.parse(raw!) as {
+      kind: string;
+      retailer: string;
+      externalId: string;
+      displayedCents: number;
+      version: string;
+    };
+    expect(note.kind).toBe("report");
+    expect(note.retailer).toBe("amazon");
+    expect(note.externalId).toBe("B0DEMOASIN");
+    expect(note.displayedCents).toBe(29900);
+    expect(typeof note.version).toBe("string");
+    expect(screen.getByText(COPY.feedbackReported)).toBeTruthy();
+  });
+
+  it("renders HTML-ish product titles as text (XSS-safe)", () => {
+    const evilTitle = `<img src=x onerror="window.__pt_xss=1"><script>window.__pt_xss=1</script>`;
+    const evil: TabState = {
+      ...ready,
+      observation: { ...observation, title: evilTitle },
+      analysis: { ...analysis, title: evilTitle },
+    };
+    render(<Panel state={evil} />);
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe(evilTitle);
+    expect(heading.querySelector("img")).toBeNull();
+    expect(heading.querySelector("script")).toBeNull();
+    expect((window as unknown as { __pt_xss?: number }).__pt_xss).toBeUndefined();
+  });
+
+  it("announces status changes in a live region", () => {
+    render(<Panel state={ready} />);
+    expect(screen.getByRole("status").textContent).toBe(COPY.statusReady);
   });
 });

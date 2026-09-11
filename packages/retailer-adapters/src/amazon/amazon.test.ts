@@ -62,7 +62,7 @@ describe("extract", () => {
       schemaVersion: 1,
       priceType: "STANDARD",
       referenceType: "UNKNOWN",
-      extractorVersion: "1.1.1",
+      extractorVersion: "1.2.0",
     });
     expect(r.observation.variant).toEqual({ Size: "Large" });
   });
@@ -144,6 +144,102 @@ describe("extract", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.observation.priceCents).toBe(1299);
+  });
+
+  it("per-oz unit price ignored; pack price wins", () => {
+    const doc = loadFixture("unit-price-per-oz.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0UNITPERO"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(849);
+    expect(r.warnings).toContain("per-unit price ignored");
+  });
+
+  it("per-item unit price ignored; pack price wins", () => {
+    const doc = loadFixture("unit-price-per-item.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0UNITITEM"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(1499);
+  });
+
+  it("coupon-only amount → no_price", () => {
+    const doc = loadFixture("coupon-only.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0COUPONLY"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("coupon amount ignored as price");
+  });
+
+  it("installment/month-only amount → no_price", () => {
+    const doc = loadFixture("installment-month.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0INSTALL1"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("installment/month price ignored");
+  });
+
+  it("cash price wins over nearby installment teaser", () => {
+    const doc = loadFixture("cash-with-installment.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0CASHINST"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(49900);
+  });
+
+  it("subscribe-and-save: prefer one-time over SNS price", () => {
+    const doc = loadFixture("subscribe-and-save.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0SNSCONF1"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(2999);
+    expect(r.warnings).toContain("subscribe-and-save price ignored; using one-time price");
+  });
+
+  it("used/marketplace offers ignored; new buy-box wins", () => {
+    const doc = loadFixture("used-marketplace.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0USEDNEW1"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(2999);
+    expect(r.warnings.some((w) => w.includes("used/marketplace"))).toBe(true);
+  });
+
+  it("shipping-only amount → no_price", () => {
+    const doc = loadFixture("shipping-only.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0SHIPONLY"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("shipping amount ignored as price");
+  });
+
+  it("strikethrough-only list price → no_price", () => {
+    const doc = loadFixture("strikethrough-only.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0STRIKE01"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+  });
+
+  it("sponsored-only prices → no_price", () => {
+    const doc = loadFixture("sponsored-only.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0SPONSOR1"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings.some((w) => /sponsored|another ASIN/i.test(w))).toBe(true);
+  });
+
+  it("conflicting primary buy-box prices → ambiguous_price", () => {
+    const doc = loadFixture("conflicting-primary-prices.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0AMBIGPR1"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("ambiguous_price");
+    expect(r.warnings).toContain("multiple conflicting primary prices");
   });
 
   it("variant page: child ASIN in #dp is still self", () => {

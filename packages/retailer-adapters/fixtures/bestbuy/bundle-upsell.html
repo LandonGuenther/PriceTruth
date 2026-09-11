@@ -1,0 +1,52 @@
+<!--
+  Bundle upsell tile price differs from the product's own cash price. Bundle
+  tile is contaminated; primary product price wins.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Camera Bundle - Best Buy</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Acme Mirrorless Camera Body",
+        "sku": "6601001",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "offers": {
+          "@type": "Offer",
+          "price": 899.99,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "sku": "6601001"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme Mirrorless Camera Body</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6601001</div>
+
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$899.99</span>
+        </div>
+      </div>
+    </div>
+
+    <div data-testid="bundle-upsell-carousel">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$1099.99</span>
+        </div>
+        <div data-testid="price-block-regular-price">
+          <span>Bundle was $1299.99</span>
+        </div>
+      </div>
+    </div>
+
+    <button data-testid="pdp-add-to-cart-6601001" type="button">Add to cart</button>
+  </body>
+</html>

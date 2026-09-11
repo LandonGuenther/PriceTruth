@@ -1,0 +1,35 @@
+<!--
+  Comp. Value reference on a DOM-only new-format PDP (no JSON-LD). Customer
+  price is current; Comp. Value is reference only.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Soundbar - Best Buy</title>
+  </head>
+  <body>
+    <h1>Acme - 2.1 Channel Soundbar - Black</h1>
+    <div class="pr-200 inline-block">Model: <!-- -->SB-210</div>
+    <div class="pr-200 inline-block">SKU: <!-- -->6578901</div>
+
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$149.99</span
+          ><span aria-hidden="true">$</span><span aria-hidden="true">149</span
+          ><span aria-hidden="true">99</span>
+        </div>
+        <div data-testid="price-block-regular-price">
+          <span class="sr-only">The comparable value is </span>
+          <span aria-hidden="true">Comp. Value: </span>
+          <span data-lu-target="comp_value">$199.99</span>
+        </div>
+      </div>
+    </div>
+
+    <button data-testid="pdp-add-to-cart-6578901" type="button">
+      <span data-testid="pdp-add-to-cart-6578901-label">Add to cart</span>
+    </button>
+  </body>
+</html>

@@ -1,0 +1,41 @@
+<!--
+  Marketplace third-party listing on a legacy /site/ URL with Comp. Value and a
+  marketplace seller note. Primary cash price is the customer price.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Bluetooth Speaker - Best Buy Marketplace</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Acme Bluetooth Speaker - Blue",
+        "sku": "6445001",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "offers": {
+          "@type": "Offer",
+          "price": 59.99,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "sku": "6445001",
+          "seller": { "@type": "Organization", "name": "Marketplace Seller Co" }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme Bluetooth Speaker - Blue</h1>
+    <div class="sku">
+      <span class="product-data-value">SKU: 6445001</span>
+    </div>
+    <div data-sku-id="6445001">
+      <div class="priceView-customer-price">
+        <span>$59.99</span>
+      </div>
+      <div class="pricing-price__regular-price">Comp. Value: $79.99</div>
+      <p>Sold and shipped by a marketplace seller</p>
+    </div>
+  </body>
+</html>

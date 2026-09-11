@@ -11,7 +11,7 @@ export const AMAZON_SELECTORS = {
   dpDataAsin: "#dp[data-asin]",
   /** Any element carrying a data-asin attribute (fallback). */
   anyDataAsin: "[data-asin]",
-  /** Detail bullets list items — scanned for the "ASIN" label. */
+  /** Detail bullets list items - scanned for the "ASIN" label. */
   detailBullets: "#detailBullets li, #detailBullets_feature_div li",
   /**
    * Price candidates, in priority order. `.a-offscreen` spans carry the
@@ -41,9 +41,26 @@ export const AMAZON_SELECTORS = {
   /** Split-price fallback: whole and fractional parts rendered separately. */
   priceWhole: ".a-price-whole",
   priceFraction: ".a-price-fraction",
-  /** Per-unit price blocks ("$0.27 / count") — never the product's price. */
+  /** Per-unit price blocks ("$0.27 / count") - never the product's price. */
   unitPriceContainers:
     ".apex-priceperunit-value, .pricePerUnit, #pricePerUnit, [class*='priceperunit' i], [class*='PricePerUnit'], [id*='pricePerUnit']",
+  /** Strikethrough / basis price hosts - never adopt as current cash price. */
+  strikethroughContainers: ".basisPrice, .a-text-strike, #listPrice, [data-a-strike='true']",
+  /** Coupon widgets whose "$X" is savings, not the product price. */
+  couponContainers:
+    "#vpcButton, #promoPriceBlockMessage_feature_div, [id*='coupon' i], [class*='coupon' i], .promoPriceBlockMessage",
+  /** Shipping / delivery fee hosts. */
+  shippingContainers:
+    "#deliveryBlockMessage, #mir-layout-DELIVERY_BLOCK, [id*='shippingMessage' i], [data-csa-c-delivery-price], .shipping-message",
+  /** Used / renewed / marketplace offer hosts (not the new buy-box). */
+  usedOfferContainers:
+    "#usedBuySection, #olpLinkWidget_feature_div, #buybox-accordion #usedAccordionRow, [id*='usedBuy' i], [data-asin-condition-code]",
+  /** Subscribe & Save / recurring price hosts. */
+  snsContainers:
+    "#snsAccordionRow, #subscribeAccordion, #sns-base-price, [id*='sns' i][class*='price' i], .snsPriceBlock",
+  /** Sponsored / cross-sell carousels (in addition to foreign-ASIN checks). */
+  sponsoredContainers:
+    "[data-component-type='sp-sponsored-result'], .AdHolder, #sponsoredProducts2_feature_div, #sp_detail, .sp_desktop_sponsored_label",
   /** Page regions whose text is checked for hidden-price messaging. */
   hiddenPriceRegions: "#dp, #centerCol, #ppd",
   /**

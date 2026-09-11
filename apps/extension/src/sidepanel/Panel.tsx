@@ -1,10 +1,13 @@
 import type { TabState } from "../messages.js";
-import { COPY } from "./copy.js";
 import {
   ConfidenceBlock,
+  DiagnosticsPanel,
   EmptyStates,
+  Feedback,
   Header,
   HistoryChart,
+  LearningCard,
+  LiveStatus,
   PriceSummary,
   ProductHeading,
   Reasons,
@@ -19,11 +22,20 @@ export function Panel({
   state: TabState;
   onRetry?: () => void;
 }): React.JSX.Element {
+  const insufficient =
+    state.status === "ready" && state.analysis.confidence.level === "INSUFFICIENT";
+
   return (
     <div className="panel">
       <Header />
+      <LiveStatus state={state} />
       {state.status === "idle" && <EmptyStates kind="idle" />}
-      {state.status === "unsupported" && <EmptyStates kind="unsupported" reason={state.reason} />}
+      {state.status === "unsupported" && (
+        <EmptyStates kind="unsupported" reason={state.reason} />
+      )}
+      {state.status === "ambiguous" && (
+        <EmptyStates kind="ambiguous" message={state.message} />
+      )}
       {state.status === "loading" && (
         <>
           <ProductHeading observation={state.observation} />
@@ -40,11 +52,7 @@ export function Panel({
         <>
           <ProductHeading observation={state.observation} />
           <PriceSummary analysis={state.analysis} />
-          {state.analysis.confidence.level === "INSUFFICIENT" && (
-            <div className="notice">
-              {COPY.insufficientNotice(state.analysis.stats.observationCount)}
-            </div>
-          )}
+          {insufficient && <LearningCard analysis={state.analysis} />}
           <HistoryChart
             history={state.history}
             currentCents={state.analysis.currentPriceCents}
@@ -54,8 +62,13 @@ export function Panel({
           <ScoreCards analysis={state.analysis} />
           <Reasons analysis={state.analysis} />
           <ConfidenceBlock analysis={state.analysis} />
+          <Feedback
+            observation={state.observation}
+            displayedCents={state.analysis.currentPriceCents}
+          />
         </>
       )}
+      <DiagnosticsPanel state={state} />
     </div>
   );
 }

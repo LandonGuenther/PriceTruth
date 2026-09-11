@@ -1,0 +1,21 @@
+<!--
+  Two buy-box containers show conflicting primary prices for the same ASIN.
+  Prefer ambiguous_price over guessing which one is current.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0AMBIGPR1">
+      <input type="hidden" id="ASIN" value="B0AMBIGPR1" />
+      <span id="productTitle">Acme Ambiguous Price Widget</span>
+      <div id="corePriceDisplay_desktop_feature_div">
+        <span class="priceToPay"><span class="a-offscreen">$199.00</span></span>
+      </div>
+      <div id="corePrice_feature_div">
+        <span class="a-price"><span class="a-offscreen">$179.00</span></span>
+      </div>
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>

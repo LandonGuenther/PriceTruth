@@ -1,0 +1,41 @@
+<!--
+  JSON-LD offers.price disagrees with the visible DOM customer price.
+  Prefer ambiguous_price over guessing which is current.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme Conflict Price Widget - Best Buy</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Acme Conflict Price Widget",
+        "sku": "6703001",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "offers": {
+          "@type": "Offer",
+          "price": 199.99,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "sku": "6703001"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme Conflict Price Widget</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6703001</div>
+
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$179.99</span>
+        </div>
+      </div>
+    </div>
+
+    <button data-testid="pdp-add-to-cart-6703001" type="button">Add to cart</button>
+  </body>
+</html>

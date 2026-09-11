@@ -1,0 +1,31 @@
+<!--
+  Financing / month amount is the only customer price. Prefer no_price over
+  adopting $24.99/mo as the product cash price.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme TV Financing - Best Buy</title>
+  </head>
+  <body>
+    <h1>Acme 65" 4K TV</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6418600</div>
+
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price" data-testid-financ="monthly">
+          <span class="sr-only">$24.99</span> /mo for 24 months with financing
+        </div>
+      </div>
+    </div>
+
+    <div data-testid="financing-offer-carousel">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$19.99</span> /mo Affirm
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

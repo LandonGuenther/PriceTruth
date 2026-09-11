@@ -1,0 +1,31 @@
+<!--
+  Sponsored carousel prices also appear under a core price selector path via
+  nested markup. Prefer no_price; never adopt a sponsored tile amount.
+  NOT a captured page; no personal data.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0SPONSOR1">
+      <span id="productTitle">Acme Primary Product</span>
+      <div id="corePrice_feature_div">
+        <span class="a-size-base a-color-secondary">
+          To see our price, add this item to your cart.
+        </span>
+      </div>
+      <div id="sponsoredProducts2_feature_div" class="AdHolder">
+        <div
+          data-component-type="sp-sponsored-result"
+          data-asin="B0OTHERSP1"
+          id="sp_detail"
+        >
+          <span class="sp_desktop_sponsored_label">Sponsored</span>
+          <div id="corePrice_desktop">
+            <span class="a-price"><span class="a-offscreen">$9.99</span></span>
+          </div>
+        </div>
+      </div>
+      <div id="availability">In Stock</div>
+    </div>
+  </body>
+</html>
