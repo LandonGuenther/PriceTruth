@@ -90,6 +90,17 @@ describe("content observer", () => {
     expect(d.sent[1]).toMatchObject({ observation: { priceCents: 25900 } });
   });
 
+  it("non-product URL on a supported host → not_product_page once", () => {
+    const d = makeDeps("https://www.amazon.com/", `<html><body>home</body></html>`);
+    startObserver(d.deps);
+    d.mutate();
+    d.flushTimers();
+    d.tickInterval();
+    const failures = d.sent.filter((m) => m.type === "pt/extraction-failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({ reason: "not_product_page", retailer: "amazon" });
+  });
+
   it("sends extraction-failed once per URL", () => {
     const d = makeDeps(
       URL1,

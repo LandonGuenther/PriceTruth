@@ -2,7 +2,7 @@ import { API_BASE_URL } from "../config.js";
 import type { RuntimeMessage, TabState } from "../messages.js";
 import { tabStateKey } from "../messages.js";
 import { ApiClient } from "./api.js";
-import { handleMessage, shouldResetOnNavigation, type HandlerStorage } from "./handler.js";
+import { handleMessage, handleNavigationStart, type HandlerStorage } from "./handler.js";
 
 const storage: HandlerStorage = {
   get: (key) => chrome.storage.session.get(key) as Promise<Record<string, TabState>>,
@@ -17,7 +17,20 @@ const api = new ApiClient(
   chrome.runtime.getManifest().version,
 );
 
-const deps = { api, storage, now: () => new Date() };
+const deps = {
+  api,
+  storage,
+  now: () => new Date(),
+  ping: async (tabId: number): Promise<boolean> => {
+    try {
+      const r = await chrome.tabs.sendMessage(tabId, { type: "pt/ping" });
+      return (r as { type?: string } | undefined)?.type === "pt/pong";
+    } catch {
+      return false;
+    }
+  },
+  schedule: (fn: () => void, ms: number) => void setTimeout(fn, ms),
+};
 
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
@@ -31,12 +44,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  const url = changeInfo.url;
-  if (!url) return;
-  void (async () => {
-    const prev = (await storage.get(tabStateKey(tabId)))[tabStateKey(tabId)];
-    if (shouldResetOnNavigation(prev, url)) {
-      await storage.set({ [tabStateKey(tabId)]: { status: "idle" } });
-    }
-  })();
+  // changeInfo.url is never populated without the "tabs" permission — reset
+  // is ping-based instead (see handleNavigationStart).
+  if (changeInfo.status === "loading") {
+    void handleNavigationStart(tabId, deps);
+  }
 });

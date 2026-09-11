@@ -1,4 +1,5 @@
 import { findAdapter } from "@pricetruth/retailer-adapters";
+import { retailerForHostname } from "@pricetruth/shared";
 import type { ContentToBackground } from "../messages.js";
 
 export interface ObserverDeps {
@@ -36,7 +37,23 @@ export function startObserver(deps: ObserverDeps): { stop: () => void } {
     const now = deps.now();
 
     const adapter = findAdapter(url);
-    if (!adapter) return; // not a retailer page we support — stay silent
+    if (!adapter) {
+      // Content script only runs on supported retailer hosts: a supported
+      // hostname without a product-page match means the user left the product
+      // page. Report it once per URL so the panel can show "unsupported".
+      const retailer = retailerForHostname(url.hostname);
+      if (retailer && !failedUrls.has(url.href)) {
+        failedUrls.add(url.href);
+        deps.send({
+          type: "pt/extraction-failed",
+          retailer,
+          reason: "not_product_page",
+          url: url.href,
+          warnings: [],
+        });
+      }
+      return;
+    }
 
     const result = adapter.extract(doc, url, now);
     if (!result.ok) {

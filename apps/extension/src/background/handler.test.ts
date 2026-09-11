@@ -4,7 +4,7 @@ import { OBSERVATION_SOURCES } from "@pricetruth/shared";
 import { ApiError, type IngestResponse } from "./api.js";
 import {
   handleMessage,
-  shouldResetOnNavigation,
+  handleNavigationStart,
   type HandlerDeps,
   type HandlerStorage,
 } from "./handler.js";
@@ -70,8 +70,20 @@ function makeDeps(apiImpl: {
     getAnalysis: apiImpl.getAnalysis ?? (async () => analysis),
     getHistory: apiImpl.getHistory ?? (async () => history),
   };
-  const deps: HandlerDeps = { api, storage, now: () => NOW };
-  return { deps, store, calls };
+  const scheduled: Array<() => void> = [];
+  const pingCalls: number[] = [];
+  const flags = { pingResult: true };
+  const deps: HandlerDeps = {
+    api,
+    storage,
+    now: () => NOW,
+    ping: async (tabId) => {
+      pingCalls.push(tabId);
+      return flags.pingResult;
+    },
+    schedule: (fn) => scheduled.push(fn),
+  };
+  return { deps, store, calls, scheduled, pingCalls, flags };
 }
 
 describe("handleMessage", () => {
@@ -156,35 +168,48 @@ describe("handleMessage", () => {
   });
 });
 
-describe("shouldResetOnNavigation", () => {
-  const ready = {
+describe("handleNavigationStart", () => {
+  const ready: TabState = {
     status: "ready",
     observation,
     analysis,
     history,
     ingest: { accepted: true, duplicate: false },
     updatedAt: "",
-  } satisfies TabState;
+  };
 
-  it("same path + different query → false (replaceState variant switch)", () => {
-    expect(shouldResetOnNavigation(ready, "https://www.amazon.com/dp/B0TESTASIN?th=1&psc=1")).toBe(
-      false,
-    );
+  it("pings only after the scheduled delay; ping false → state idle", async () => {
+    const { deps, store, scheduled, pingCalls, flags } = makeDeps({});
+    flags.pingResult = false;
+    store.set(tabStateKey(11), ready);
+
+    const p = handleNavigationStart(11, deps);
+    expect(pingCalls).toHaveLength(0); // not yet — waiting on schedule
+    expect(scheduled).toHaveLength(1);
+    for (const fn of scheduled.splice(0)) fn();
+    await p;
+
+    expect(pingCalls).toEqual([11]);
+    expect(store.get(tabStateKey(11))).toEqual({ status: "idle" });
   });
 
-  it("different path → true", () => {
-    expect(shouldResetOnNavigation(ready, "https://www.amazon.com/dp/B0OTHERASI")).toBe(true);
+  it("ping true → ready state preserved (Amazon ghost loading events)", async () => {
+    const { deps, store, scheduled } = makeDeps({});
+    store.set(tabStateKey(12), ready);
+    const p = handleNavigationStart(12, deps);
+    for (const fn of scheduled.splice(0)) fn();
+    await p;
+    expect(store.get(tabStateKey(12))).toBe(ready);
   });
 
-  it("no observation in prev → true", () => {
-    expect(shouldResetOnNavigation({ status: "idle" }, "https://www.amazon.com/dp/X")).toBe(true);
-    expect(shouldResetOnNavigation(undefined, "https://www.amazon.com/dp/X")).toBe(true);
-    expect(
-      shouldResetOnNavigation({ status: "unsupported", retailer: "amazon" }, "https://a.com/"),
-    ).toBe(true);
-  });
-
-  it("invalid URL → true", () => {
-    expect(shouldResetOnNavigation(ready, "not a url")).toBe(true);
+  it("state loading + ping false → untouched (ingest in flight)", async () => {
+    const { deps, store, scheduled, flags } = makeDeps({});
+    flags.pingResult = false;
+    const loading: TabState = { status: "loading", observation };
+    store.set(tabStateKey(13), loading);
+    const p = handleNavigationStart(13, deps);
+    for (const fn of scheduled.splice(0)) fn();
+    await p;
+    expect(store.get(tabStateKey(13))).toBe(loading);
   });
 });

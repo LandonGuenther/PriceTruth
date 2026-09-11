@@ -18,12 +18,20 @@ changes also need a page reload.
 ## Per-tab state & navigation
 
 `TabState` lives in `chrome.storage.session` under `tab:<tabId>` (in-memory
-only). `tabs.onRemoved` clears it. `tabs.onUpdated` resets to `idle` only when
-`changeInfo.url` is present AND its `origin + pathname` differs from the stored
-observation's URL — pathname carries the ASIN/SKU, so query-only churn (e.g.
-Amazon's `?th=1` replaceState, or the extra `loading` event Amazon fires after
-the content script's observation) keeps the ready state. See
-`shouldResetOnNavigation` in `src/background/handler.ts`.
+only). `tabs.onRemoved` clears it. On `tabs.onUpdated` with `status:"loading"`,
+the service worker waits ~1.5s and pings the tab (`pt/ping` → `pt/pong`). No
+answer means the tab left a supported host or is still loading → state resets
+to `idle`. If the content script is alive, state is left alone (a supported
+product page repopulates it via the observer); this also means Amazon's ghost
+`loading` events after page load cannot wipe a ready panel. A state of
+`loading` (ingest in flight) is never reset by the ping check.
+
+We deliberately do not use the `tabs` permission — it would expose the URLs of
+all tabs and shows users a "read your browsing history" warning. Without it,
+`changeInfo.url` is never delivered, hence the ping design. The ping is also
+why navigating from a product page to a supported host's non-product page (e.g.
+the Amazon home page) reports `not_product_page` — the content script stays
+injected and tells the panel directly.
 
 ## Environment
 

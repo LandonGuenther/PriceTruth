@@ -13,7 +13,14 @@ export interface HandlerDeps {
   api: Pick<ApiClient, "postObservation" | "getAnalysis" | "getHistory">;
   storage: HandlerStorage;
   now: () => Date;
+  /** Resolves true if the content script on the tab answers pt/ping with pt/pong. */
+  ping: (tabId: number) => Promise<boolean>;
+  /** setTimeout equivalent (injected for tests). */
+  schedule: (fn: () => void, ms: number) => void;
 }
+
+/** Delay before pinging after a navigation starts — lets the new page's content script load. */
+export const NAVIGATION_PING_DELAY_MS = 1500;
 
 const unreachableMessage = `Could not reach the ${PRODUCT_NAME} service. Check that it is running and try again.`;
 
@@ -57,29 +64,20 @@ async function runObservation(
 }
 
 /**
- * Should a navigation reset the tab state to idle? Reset only on a real page
- * change (different origin+pathname — the pathname carries the ASIN/SKU for
- * both retailers, so query-only replaceState churn keeps state). Anything
- * without a stored observation, and unparseable URLs, resets.
+ * Called on tabs.onUpdated status "loading". We cannot read changeInfo.url
+ * (that needs the "tabs" permission, which we refuse for privacy), so after a
+ * short delay we ping the content script: no answer means the tab left a
+ * supported host (or is still loading) → reset to idle. A live supported page
+ * refreshes state itself via the observer. Amazon emits ghost "loading" events
+ * after page load — the ping prevents those from wiping ready state, and an
+ * in-flight ingest (state "loading") is never touched.
  */
-export function shouldResetOnNavigation(prev: TabState | undefined, newUrl: string): boolean {
-  let next: URL;
-  try {
-    next = new URL(newUrl);
-  } catch {
-    return true;
-  }
-  const prevUrl =
-    prev && (prev.status === "loading" || prev.status === "ready" || prev.status === "error")
-      ? prev.observation?.url
-      : undefined;
-  if (!prevUrl) return true;
-  try {
-    const p = new URL(prevUrl);
-    return p.origin + p.pathname !== next.origin + next.pathname;
-  } catch {
-    return true;
-  }
+export async function handleNavigationStart(tabId: number, deps: HandlerDeps): Promise<void> {
+  await new Promise<void>((resolve) => deps.schedule(resolve, NAVIGATION_PING_DELAY_MS));
+  const alive = await deps.ping(tabId);
+  const prev = await getState(deps, tabId);
+  if (prev?.status === "loading") return;
+  if (!alive) await setState(deps, tabId, { status: "idle" });
 }
 
 export async function handleMessage(

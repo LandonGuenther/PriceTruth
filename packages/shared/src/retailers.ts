@@ -7,6 +7,15 @@ export interface RetailerInfo {
   hostnames: string[];
 }
 
+/** Map a hostname to a supported retailer, or null. Subdomains of a registered hostname count. */
+export function retailerForHostname(hostname: string): RetailerId | null {
+  const host = hostname.toLowerCase();
+  for (const r of Object.values(RETAILERS)) {
+    if (r.hostnames.some((h) => host === h || host.endsWith(`.${h}`))) return r.id;
+  }
+  return null;
+}
+
 export const RETAILERS: Record<RetailerId, RetailerInfo> = {
   amazon: {
     id: "amazon",

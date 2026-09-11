@@ -20,7 +20,11 @@ export type ContentToBackground =
 /** Sent by the side panel to re-run the last observation for a tab. */
 export type PanelToBackground = { type: "pt/retry"; tabId: number };
 
-export type RuntimeMessage = ContentToBackground | PanelToBackground;
+/** Sent background → content to check the content script is alive on this tab. */
+export type BackgroundToContent = { type: "pt/ping" };
+export type ContentPong = { type: "pt/pong" };
+
+export type RuntimeMessage = ContentToBackground | PanelToBackground | BackgroundToContent;
 
 export type TabState =
   | { status: "idle" }

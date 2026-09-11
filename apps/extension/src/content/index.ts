@@ -7,7 +7,16 @@
  * content, browsing history, or personal data leaves the extension.
  */
 import { startObserver } from "./observer.js";
-import type { ContentToBackground } from "../messages.js";
+import type { BackgroundToContent, ContentPong, ContentToBackground } from "../messages.js";
+
+// Service-worker liveness check: answer pt/ping synchronously with pt/pong.
+chrome.runtime.onMessage.addListener(
+  (msg: BackgroundToContent, _sender, sendResponse: (r: ContentPong) => void) => {
+    if (msg.type === "pt/ping") {
+      sendResponse({ type: "pt/pong" });
+    }
+  },
+);
 
 startObserver({
   getUrl: () => new URL(window.location.href),
