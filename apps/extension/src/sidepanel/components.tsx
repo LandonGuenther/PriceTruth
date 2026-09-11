@@ -78,7 +78,7 @@ export function Header(): React.JSX.Element {
 }
 
 export function LiveStatus({ state }: { state: TabState }): React.JSX.Element {
-  let message = COPY.statusIdle;
+  let message: string = COPY.statusIdle;
   if (state.status === "unsupported") message = COPY.statusUnsupported;
   else if (state.status === "ambiguous") message = COPY.statusAmbiguous;
   else if (state.status === "loading") message = COPY.statusLoading;

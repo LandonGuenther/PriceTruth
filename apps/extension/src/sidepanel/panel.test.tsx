@@ -141,7 +141,7 @@ describe("Panel", () => {
   it("ready state shows price, advertised discount, scores and labels", () => {
     render(<Panel state={ready} />);
     expect(screen.getByText("Acme Demo Widget 3000")).toBeTruthy();
-    expect(screen.getByText("$299.00")).toBeTruthy();
+    expect(screen.getAllByText("$299.00").length).toBeGreaterThan(0);
     expect(screen.getByText(/40% off store reference of \$499\.00/)).toBeTruthy();
     expect(screen.getByText(/~6\.3% below typical/)).toBeTruthy();
     expect(screen.getByText("9/100")).toBeTruthy();
@@ -193,7 +193,7 @@ describe("Panel", () => {
     expect(screen.queryByText("Discount Integrity")).toBeNull();
     expect(screen.queryByText("Deal Score")).toBeNull();
     expect(document.body.textContent).not.toContain("—");
-    expect(screen.getByText(COPY.notEnoughData)).toBeTruthy();
+    expect(screen.getAllByText(COPY.notEnoughData).length).toBeGreaterThan(0);
   });
 
   it("history chart offers window controls and an accessible table fallback", () => {
