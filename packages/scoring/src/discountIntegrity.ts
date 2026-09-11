@@ -32,7 +32,12 @@ export function computeDiscountIntegrity(
   if (confidence.level === "INSUFFICIENT") {
     return {
       ...insufficientScore(stats),
-      advertisedDiscountPct: null,
+      // The advertised markdown is a store-reported fact (reference vs current),
+      // not a historical judgment — report it regardless of confidence.
+      advertisedDiscountPct:
+        referenceCents !== null && referenceCents > currentCents
+          ? round1((100 * (referenceCents - currentCents)) / referenceCents)
+          : null,
       actualDiscountVsTypicalPct: null,
       reasons: [...confidence.reasons],
     };

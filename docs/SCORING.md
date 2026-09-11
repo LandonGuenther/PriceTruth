@@ -89,6 +89,12 @@ Labels:
 
 "Does the advertised markdown have historical support?"
 
+`advertisedDiscountPct` is a **store-reported fact** (reference vs current), not
+a historical judgment: it is computed whenever a valid reference price exceeds
+the current price, independent of confidence — including under `INSUFFICIENT`,
+where the score and label stay null/"Limited history" but the markdown is still
+reported.
+
 If there is no reference price, or `reference <= current`: `score: null`,
 label `No advertised discount`, `advertisedDiscountPct: null`.
 

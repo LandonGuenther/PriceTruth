@@ -30,7 +30,10 @@ export function PriceSummary({ analysis }: { analysis: AnalysisResponse }): Reac
 
   let storeLine: string = COPY.noAdvertisedDiscount;
   if (advertised !== null && analysis.referencePriceCents !== null) {
-    storeLine = `${Math.round(advertised)}% OFF · Was ${formatCents(analysis.referencePriceCents, currency)}`;
+    storeLine = COPY.storeReference(
+      Math.round(advertised),
+      formatCents(analysis.referencePriceCents, currency),
+    );
   }
 
   let historyLine: string = COPY.typicalRecentPrice;

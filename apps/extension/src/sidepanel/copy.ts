@@ -9,6 +9,7 @@ export const COPY = {
   storeSays: "STORE SAYS",
   historySays: "HISTORY SAYS",
   noAdvertisedDiscount: "No advertised discount",
+  storeReference: (pct: number, ref: string) => `${pct}% off store reference of ${ref}`,
   typicalRecentPrice: "Typical recent price",
   belowTypical: (pct: number) => `~${pct}% below typical recent price`,
   aboveTypical: (pct: number) => `~${pct}% above typical recent price`,

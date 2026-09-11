@@ -89,8 +89,7 @@ describe("Panel", () => {
     render(<Panel state={ready} />);
     expect(screen.getByText("Acme Demo Widget 3000")).toBeTruthy();
     expect(screen.getByText("$299.00")).toBeTruthy();
-    expect(screen.getByText(/40% OFF/)).toBeTruthy();
-    expect(screen.getByText(/Was \$499\.00/)).toBeTruthy();
+    expect(screen.getByText(/40% off store reference of \$499\.00/)).toBeTruthy();
     expect(screen.getByText(/~6\.3% below typical/)).toBeTruthy();
     expect(screen.getByText("9/100")).toBeTruthy();
     expect(screen.getByText("78/100")).toBeTruthy();

@@ -92,6 +92,42 @@ describe("discount integrity edge cases", () => {
     expect(result.discountIntegrity.score).toBeNull();
     expect(result.discountIntegrity.label).toBe("No advertised discount");
   });
+
+  it("insufficient history still reports the advertised markdown", () => {
+    const obs: ScoringObservation[] = [
+      {
+        priceCents: 24000,
+        referencePriceCents: null,
+        observedAt: "2025-06-29T12:00:00.000Z",
+        source: "test",
+      },
+      {
+        priceCents: 23899,
+        referencePriceCents: 27499,
+        observedAt: AS_OF.toISOString(),
+        source: "test",
+      },
+    ];
+    const result = analyzeListing({ observations: obs, asOf: AS_OF });
+    expect(result.confidence.level).toBe("INSUFFICIENT");
+    expect(result.discountIntegrity.score).toBeNull();
+    expect(result.discountIntegrity.advertisedDiscountPct).toBe(13.1);
+    expect(result.discountIntegrity.actualDiscountVsTypicalPct).toBeNull();
+  });
+
+  it("insufficient history without a reference → advertisedDiscountPct null", () => {
+    const obs: ScoringObservation[] = [
+      {
+        priceCents: 23899,
+        referencePriceCents: null,
+        observedAt: AS_OF.toISOString(),
+        source: "test",
+      },
+    ];
+    const result = analyzeListing({ observations: obs, asOf: AS_OF });
+    expect(result.confidence.level).toBe("INSUFFICIENT");
+    expect(result.discountIntegrity.advertisedDiscountPct).toBeNull();
+  });
 });
 
 describe("score labels", () => {
