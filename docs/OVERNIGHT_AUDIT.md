@@ -41,16 +41,20 @@ api 31 incl. fresh + upgrade migration paths against PostgreSQL 16), `build` —
 
 ## Beta blockers
 
-1. **Amazon cross-sell price contamination** (confirmed live): when a PDP hides its price,
-   the global `.a-price-whole` fallback captures a recommended item's price and stores it
-   under the target ASIN. Wrong history for real users.
-2. **No anti-poisoning**: any client can post any price; a single `$999 → $9` observation
-   enters history as `ACCEPTED` and moves the medians.
-3. **Identity is per-listing**: the same product on Amazon and Best Buy never shares
-   history; there is no identifier validation or conflict tracking.
-4. **Validation gaps**: URL hostname vs retailer, identifier format per retailer, field
-   lengths, variant payload size, request body size, and `referencePrice > price` are
-   not enforced server-side; 5xx responses echo internal error messages.
+1. **Amazon cross-sell price contamination** - **mitigated (extension/adapters)**: buy-box
+   scoped extraction rejects foreign-ASIN / carousel prices; covered by
+   `hidden-price-cross-sell` and `cross-sell-with-buybox` fixtures. Historical note: a
+   global `.a-price-whole` fallback previously leaked recommended prices under the
+   target ASIN. Live PDP confirmation still belongs on the beta checklist.
+2. **No anti-poisoning** (backend-owned): any client can post any price; a single
+   `$999 → $9` observation enters history as `ACCEPTED` and moves the medians.
+3. **Identity is per-listing** (backend/catalog-owned): the same product on Amazon and
+   Best Buy never shares history; identifier validation / conflict tracking is a
+   catalog concern.
+4. **Validation gaps** (backend-owned): URL hostname vs retailer, identifier format per
+   retailer, field lengths, variant payload size, request body size, and
+   `referencePrice > price` are not all enforced server-side; 5xx responses may echo
+   internal error messages.
 
 ## Long-term scaling hazards
 

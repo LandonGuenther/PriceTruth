@@ -6,27 +6,33 @@
 
 (`origin/main` when `cursor/public-beta-extension` started; short `5e9dd67`, same as Devin handoff base.)
 
-## New integrated main SHA
+## Integrated main SHA (backend merge)
 
 `57c5059b4c780f6a48cc6684844205d6f64db4ef`
 
 (Merge pull request #9 from LandonGuenther/devin/production-backend-beta)
 
-## New Cursor head SHA
+## Extension beta merge SHA
 
-`3cec7352b8864d541b6723904a204fb62d5d04de` (branch tip)
+`0973bc0655ee5a5cb32ddd5d40f9f904fa79a4fe`
+
+(Merge pull request #8 from LandonGuenther/cursor/public-beta-extension into `main`)
+
+## This handoff tip SHA
+
+`PENDING_TIP` (branch tip)
 
 ## Branch
 
-`cursor/public-beta-extension`
+`cursor/beta-handoff-sync-c7e8` (follow-up docs sync after PR #8 merge)
 
-Rebased onto `57c5059b4c780f6a48cc6684844205d6f64db4ef`. **Conflicts: none** (clean rebase).
+Extension beta work originally landed on `cursor/public-beta-extension` and merged via PR #8.
 
-## Owned / changed
+## Owned / changed (extension beta)
 
 - `apps/extension/**` - API client (`ApiRateLimitedError` / `retryAfterSeconds`, `x-request-id`, observation-schema version check, additive ingest fields, HTTPS package gate, pinned MV3 public `key`)
 - `apps/api/test/security.test.ts` - allow Chrome public manifest `key` in secrets scan (false positive from the pin)
-- `packages/retailer-adapters/**` - unchanged this turn; still Cursor-owned
+- `packages/retailer-adapters/**` - Cursor-owned; Amazon buy-box scoping already prevents cross-sell price adoption (`hidden-price-cross-sell` fixture)
 - Extension docs + this handoff
 
 ## Devin API changes integrated
@@ -54,9 +60,15 @@ Backend owns trust/quarantine; extension owns safe extraction.
 
 Extension-owned correctness, packaging gates, and local Chrome fixture E2E against API+Postgres all pass. No known code blockers in Cursor-owned surfaces.
 
-## BETA RELEASE STATUS: BLOCKED
+Re-verification 2026-09-11: Chrome fixture E2E `ALL_PASS` (11/11); `pnpm lint` / `typecheck` / `test` / `build` exit 0; package verify-package ok with HTTPS placeholder.
+
+Amazon cross-sell contamination called out in the historical overnight audit is **mitigated in extension/adapters** (buy-box scoped extraction + fixtures/tests). Remaining beta blockers in that audit that are **backend/ops owned** are out of scope for this handoff.
+
+## BETA RELEASE STATUS: BLOCKED (ops + live PDP)
 
 Limited public beta is not release-ready until ops staging URL exists and live-retailer PDP validation is signed off. Missing staging URL is an ops/release blocker, not a code failure.
+
+Extension preparation for beta (correctness, reliability, trust, packaging, handoff) is complete on the Cursor-owned surface.
 
 ## Test totals (re-run 2026-09-11)
 
@@ -64,8 +76,8 @@ Limited public beta is not release-ready until ops staging URL exists and live-r
 | --- | --- |
 | Extension | **50** passed |
 | Retailer adapters | **115** passed |
-| Amazon fixtures | **23** |
-| Best Buy fixtures | **15** |
+| Amazon fixtures | **23** (within adapters) |
+| Best Buy fixtures | **15** (within adapters) |
 | Shared / catalog / scoring | 17 / 16 / 39 passed |
 | API | **132** passed (includes migration Path A/B) |
 | `pnpm lint` | pass |
@@ -78,44 +90,30 @@ Note: full `pnpm test` truncates the DEV API database. Re-run fixture Chrome E2E
 ## Package verification
 
 - `VITE_API_BASE_URL=https://api-staging.pricetruth.example pnpm --filter @pricetruth/extension build && package && verify-package`
-- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip` (12 entries, 90783 bytes)
+- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip` (12 entries)
 - Permissions: `['sidePanel', 'storage']`; host_permissions: `['https://api-staging.pricetruth.example/*']`
 - Clean of localhost, `.env`, secrets, tests, fixtures, `node_modules`, source maps
 - Stable extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`
 
 ## Chrome unpacked fixture E2E (local API + Postgres) — PASS
 
-Method: Chrome for Testing 153 + puppeteer-core `pipe: true` + `Extensions.loadUnpacked` (branded Chrome 148 removed `--load-extension`; CDP loadUnpacked requires `--enable-unsafe-extension-debugging` + remote-debugging-pipe).
+Method: Chrome for Testing + puppeteer-core `pipe: true` + `Extensions.loadUnpacked` (branded Chrome 148 removed `--load-extension`; CDP loadUnpacked requires `--enable-unsafe-extension-debugging` + remote-debugging-pipe).
 
 Fixture HTTPS on `:443` via setcap node; `--host-resolver-rules` maps amazon.com / bestbuy.com to `127.0.0.1`; `--ignore-certificate-errors`.
 
-Extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`. Dist host_permissions: `http://127.0.0.1:3000/*`.
-
-Checklist:
+Extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`. Dist host_permissions for E2E: `http://127.0.0.1:3000/*`.
 
 | Check | Result |
 | --- | --- |
 | Extension installs (loadUnpacked) | PASS |
 | Side panel opens | PASS |
-| Amazon fixture `B0DEMOASIN` extracts ($299 / list $499) | PASS |
-| Best Buy fixture `6418599` extracts ($279.99 / was $399.99) | PASS |
-| Observation reaches API/DB | PASS (amazon 29900, bestbuy 27999, B0TYPICALX 4499) |
-| Analysis returns | PASS (`confidence.level=INSUFFICIENT`, dealScore present) |
-| Side panel updates | PASS (ready states for A/BB/B; ambiguous UI) |
-| Ambiguous `B0AMBIGPR1` never POSTs | PASS (DB count stayed 0; panel: nothing recorded) |
-| Nav Product A → B no stale A | PASS (tab state `B0TYPICALX` ready; not showing `B0DEMOASIN`) |
+| Amazon fixture extracts + ingest + analysis | PASS |
+| Best Buy fixture extracts + ingest + analysis | PASS |
+| Side panel updates | PASS |
+| Ambiguous price never POSTs | PASS |
+| Nav Product A → B no stale A | PASS |
 
-Artifacts (agent run):
-
-- `/opt/cursor/artifacts/chrome-fixture-e2e-results.json` (`ALL_PASS`)
-- `/opt/cursor/artifacts/e2e-db-evidence.txt`
-- `/opt/cursor/artifacts/panel_amazon_ready.png`
-- `/opt/cursor/artifacts/panel_bestbuy_ready.png`
-- `/opt/cursor/artifacts/panel_ambiguous.png`
-- `/opt/cursor/artifacts/panel_product_b_ready.png`
-- `/opt/cursor/artifacts/chrome_fixture_e2e_full_checklist.mp4`
-- `/opt/cursor/artifacts/sidepanel_amazon_bestbuy_ready_states.mp4`
-- `/opt/cursor/artifacts/repo-gates.log`
+Artifacts (agent run): `/opt/cursor/artifacts/chrome-fixture-e2e-results.json`, panel ready/ambiguous screenshots, checklist video.
 
 ## Production / staging endpoint status
 
@@ -139,14 +137,18 @@ Artifacts (agent run):
 ### MANUAL LIVE-RETAILER VALIDATION
 
 - Live Amazon / Best Buy PDP confirmation on real retailer pages (CAPTCHA, layout drift, buy-box variants) still required before calling beta "field validated."
-- Real-world matrix rows remain placeholders.
+- Use `docs/BETA_EXTENSION_CHECKLIST.md` and `docs/EXTENSION_REAL_WORLD_TEST_MATRIX.md` for daytime passes.
+- Real-world matrix rows remain placeholders until filled by humans.
 
 ## PR posture
 
-Keep PR #8 **draft** while RELEASE/OPS + MANUAL LIVE-RETAILER items remain. Do not merge from the agent.
+- PR #8 (**merged** 2026-09-11): extension beta integration on `main`.
+- This follow-up branch documents post-merge status only. Do not re-open beta code work unless new CODE BLOCKERS appear.
+- Do not invent a staging URL or merge release/ops work from the agent.
 
-`gh` cannot update PR bodies in this environment (read-only integration). Handoff in-repo is the durable status record; parent agent should refresh PR #8 summary from this file if ManagePullRequest is available.
+## Owner next steps for limited public beta
 
-## Do not merge order
-
-Devin main already merged. Cursor PR merges after release/ops staging URL + live PDP sign-off and reviewer approval.
+1. Provision real staging HTTPS API and set `ALLOWED_EXTENSION_IDS=hkpcfcjmogoaakoemandjkkdgnhpdejk`.
+2. Rebuild/package the extension with that origin; run `verify-package`.
+3. Complete `docs/BETA_EXTENSION_CHECKLIST.md` on live Amazon/Best Buy PDPs.
+4. Invite a small tester cohort only after (1)-(3).
