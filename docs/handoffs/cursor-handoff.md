@@ -1,62 +1,115 @@
-# Cursor handoff - public beta extension
+# Cursor handoff - public beta extension (post-Devin integration)
 
-## BASE MAIN SHA
+## Original Cursor base SHA
 
 `5e9dd67d50e84a16a0a4e0437204b83220e6a29d`
 
-## CURSOR HEAD SHA
+(`origin/main` when `cursor/public-beta-extension` started; short `5e9dd67`, same as Devin handoff base.)
 
-`f4ed15f11e58901a430b76c2fcc92725715a0bac` (docs/package commits may follow)
+## New integrated main SHA
+
+`57c5059b4c780f6a48cc6684844205d6f64db4ef`
+
+(Merge pull request #9 from LandonGuenther/devin/production-backend-beta)
+
+## New Cursor head SHA
+
+`d9385c1bf61372fbbda84df9788ab7a594509691` (docs commit updating this file may follow)
 
 ## Branch
 
 `cursor/public-beta-extension`
 
+Rebased onto `57c5059b4c780f6a48cc6684844205d6f64db4ef`. **Conflicts: none** (clean rebase; no ours/theirs resolution).
+
 ## Owned / changed
 
-- `apps/extension/**` (state machine, API client validation, production package gate, panel UX, diagnostics, feedback, a11y)
-- `packages/retailer-adapters/**` (`ambiguous_price`, unit-price / Comp. Value / financing fixtures)
-- `docs/EXTENSION.md`, `docs/EXTENSION_ARCHITECTURE.md`, `docs/EXTENSION_QA.md`, `docs/EXTENSION_PERFORMANCE.md`
-- `docs/BETA_EXTENSION_CHECKLIST.md`, `docs/EXTENSION_REAL_WORLD_TEST_MATRIX.md`
-- `docs/handoffs/cursor-handoff.md`
+- `apps/extension/**` - API client (`ApiRateLimitedError` / `retryAfterSeconds`, request id header, observation-schema version check, additive ingest fields, HTTPS package gate, pinned MV3 public `key`)
+- `apps/api/test/security.test.ts` - allow Chrome public manifest `key` in secrets scan (false positive from the pin; not a backend architecture change)
+- `packages/retailer-adapters/**` - unchanged this turn; still Cursor-owned
+- Extension docs + this handoff
 
-## API assumptions
+## Devin API changes integrated
 
-- `POST /v1/observations`
-- `GET /v1/listings/:retailer/:externalId/analysis`
-- `GET /v1/listings/:retailer/:externalId/history`
-- Additive unknown JSON fields are tolerated
-- Existing field names are not renamed by this branch
-- Optional response header `x-pricetruth-api-version` (major)
+From `docs/handoffs/devin-handoff.md` and live API on integrated main:
 
-## Shared types touched
+- Response headers: `x-pricetruth-api-version`, `x-pricetruth-observation-schema-version`, `x-request-id`
+- Success bodies add `apiVersion: 1`
+- Ops routes confirmed: `GET /health`, `GET /readiness`
+- 429 body `{ error: "rate_limited", message, retryAfterSeconds }` mapped to `ApiRateLimitedError` (no auto-retry)
+- Ingest additive fields: `status`, `enrichment`, `apiVersion` (type-checked when present)
+- CORS allow-list (`ALLOWED_EXTENSION_IDS`) ready for pinned id `hkpcfcjmogoaakoemandjkkdgnhpdejk`
+- `@pricetruth/shared` types: **no breaking changes**; additive fields handled in extension-local parsers
 
-None intentionally. Extension-local parsers wrap `@pricetruth/shared` response types.
+## Observation payload (extension -> API)
 
-## Backend changes requested
+Posted only after confident extraction. `RetailerObservation` fields from `@pricetruth/shared`:
 
-1. Publish the production API origin for packaging (`VITE_API_BASE_URL`).
-2. Confirm CORS allows the Chrome extension origin model used in MV3.
-3. Keep analysis/history response fields additive-compatible through Devin merge.
-4. Monorepo `apps/api` typecheck/test currently fails on main from Prisma client drift (`ObservationStatus`, `effectiveAt`, etc.). That is Devin-owned; Cursor did not patch it.
+`retailer`, `externalId`, `url`, `title`, `brand`, `modelNumber`, `gtin`, `priceCents`, `referencePriceCents`, `currency`, `inStock`, `variant`, `source`, `observedAt`, `schemaVersion`, `priceType`, `referenceType`, `extractorVersion`
 
-## Production API integration status
+Client version header: `x-pricetruth-client-version`.
 
-Package gate is ready. Production URL is not hard-coded. Waiting on Devin handoff for the real origin before a testers zip is cut.
+Not fabricated: confidence, trust, quarantine, enrichment outcomes.
 
-## Test totals (this branch)
+## Data quality
 
-- Extension: 48 passed
-- Retailer adapters: 115 passed
-- Amazon fixtures: 23
-- Best Buy fixtures: 15
+Extraction failure reasons that never ingest: `not_product_page`, `no_identifier`, `no_price`, `ambiguous_price`, `invalid`.
 
-## Bundle / package
+Handler coverage confirms ambiguous/no-price paths do not call `POST /v1/observations`.
+Backend owns trust/quarantine; extension owns safe extraction only.
 
-- content ~73KB, service-worker ~10KB, sidepanel ~158KB
-- verified zip ~90KB, 12 entries, no tests/fixtures/src/node_modules
+## Shared types changed
 
-## Known issues
+None intentionally.
+
+## Test totals
+
+| Suite | Result |
+| --- | --- |
+| Extension (`@pricetruth/extension`) | **50** passed |
+| Retailer adapters (`@pricetruth/retailer-adapters`) | **115** passed |
+| Amazon fixtures | **23** |
+| Best Buy fixtures | **15** |
+| `pnpm lint` | pass |
+| `pnpm typecheck` | pass (needs `prisma generate` in this environment) |
+| `pnpm build` | pass |
+| API unit/integration | **130** passed; migration suite blocked by env (below) |
+
+### Unrelated API failure (not caused by this branch)
+
+`apps/api/test/migration.test.ts` cannot run here: Postgres role lacks `CREATEDB` (`permission denied to create database`). Extension code is not involved. Documented only; backend architecture not modified.
+
+## Package verification
+
+- `VITE_API_BASE_URL=https://api-staging.pricetruth.example pnpm --filter @pricetruth/extension build && pnpm --filter @pricetruth/extension package && pnpm --filter @pricetruth/extension verify-package`
+- Result: **ok** - `apps/extension/release/pricetruth-extension-0.1.0.zip` (12 entries, ~91KB)
+- Clean of localhost, `.env`, secrets, tests, fixtures, `node_modules`, source maps
+- Manifest permissions: `sidePanel`, `storage`; host_permissions only the packaging API origin
+- Stable extension id (public key): `hkpcfcjmogoaakoemandjkkdgnhpdejk`
+
+## Runtime E2E (local merged API + DB)
+
+Against restarted API on integrated main + DEV DB `/pricetruth`:
+
+- Valid observation -> analysis -> history: pass
+- Insufficient-history analysis (`confidence.level = "INSUFFICIENT"`): pass
+- Missing price rejected by API; client never posts ambiguous/no-price/identity failures: pass
+- Stale navigation / generation protection: pass (`handler.test.ts`)
+- Network failure classification: pass
+- Live response bodies parse through extension validators: pass
+
+Still manual:
+
+- Unpacked Chrome side panel on live Amazon/Best Buy PDPs (CAPTCHA/throttling risk)
+
+## Production / staging endpoint status
+
+- `docs/STAGING_DEPLOYMENT.md`: **PLANNED** - no staging host provisioned
+- Package gate requires non-empty HTTPS non-localhost `VITE_API_BASE_URL`
+- Verified with placeholder `https://api-staging.pricetruth.example` only
+- Do not hard-code a fake production URL in source
+
+## Remaining issues
 
 ### P0
 
@@ -64,27 +117,19 @@ Package gate is ready. Production URL is not hard-coded. Waiting on Devin handof
 
 ### P1
 
-- Live Amazon visible buy-box confirmation still needs daytime manual pass (pages often hide price in automation).
-- Full monorepo typecheck/test red on main due to API/Prisma drift (blocks whole-repo CI until Devin lands).
-- Production API URL unknown until backend deploy docs arrive.
+- Real staging/production HTTPS origin still unpublished (blocks a real testers zip).
+- `apps/api/test/migration.test.ts` cannot `CREATE DATABASE` in this environment (blocks claiming full monorepo `pnpm test` green here).
+- Daytime manual Chrome PDP confirmation still required.
 
 ### P2
 
-- Real-world matrix rows are empty placeholders for daytime filling.
-- Optional Chrome fixture E2E harness can be expanded further; CI stays fixture/unit based.
+- Real-world matrix rows still placeholders.
+- Optional Chrome fixture E2E harness can expand; CI stays unit/fixture based.
 
-## Exact steps after Devin merges
+## PR posture
 
-1. Wait for Devin/backend PR to merge to `main`.
-2. `git fetch origin main && git checkout cursor/public-beta-extension && git rebase origin/main`
-3. Fix any additive API/type mismatches in `apps/extension/src/background/api.ts` parsers only.
-4. Run `pnpm --filter @pricetruth/extension typecheck test build`
-5. Run `pnpm --filter @pricetruth/retailer-adapters typecheck test`
-6. If whole-repo gates are green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
-7. Build testers zip with the real origin:
-   `VITE_API_BASE_URL=<prod-origin> pnpm --filter @pricetruth/extension build && VITE_API_BASE_URL=<prod-origin> pnpm --filter @pricetruth/extension package && pnpm --filter @pricetruth/extension verify-package`
-8. Do not merge this PR until steps 1-6 succeed.
+Keep PR #8 **draft** while any P1 remains. Do not merge from the agent.
 
 ## Do not merge order
 
-Devin first, Cursor rebase second, then Cursor merge.
+Devin main is already merged. Cursor PR merges only after P1 clearance and reviewer approval.
