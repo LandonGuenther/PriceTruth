@@ -108,21 +108,25 @@ async function main() {
     ),
   );
 
-  // rollup over the whole DB from scratch
-  for (const j of ["rollup:observations", "rollup:status-events"]) {
-    await prisma.jobCheckpoint.upsert({
-      where: { jobName: j },
-      create: { jobName: j, cursor: "0" },
-      update: { cursor: "0" },
-    });
+  // rollup over the whole DB from scratch (skipped with --skip-rollup)
+  if (process.argv.includes("--skip-rollup")) {
+    console.log("rollup_full: skipped (--skip-rollup)");
+  } else {
+    for (const j of ["rollup:observations", "rollup:status-events"]) {
+      await prisma.jobCheckpoint.upsert({
+        where: { jobName: j },
+        create: { jobName: j, cursor: "0" },
+        update: { cursor: "0" },
+      });
+    }
+    const tRoll = process.hrtime.bigint();
+    const r = await runDailyRollupJob(prisma);
+    const rollSec = Number(process.hrtime.bigint() - tRoll) / 1e9;
+    const dailyRows = await prisma.listingDailyPrice.count();
+    console.log(
+      `rollup_full: ${rollSec.toFixed(1)}s (${r.rolledDays} listing-days recomputed, ${dailyRows} rows in ListingDailyPrice)`,
+    );
   }
-  const tRoll = process.hrtime.bigint();
-  const r = await runDailyRollupJob(prisma);
-  const rollSec = Number(process.hrtime.bigint() - tRoll) / 1e9;
-  const dailyRows = await prisma.listingDailyPrice.count();
-  console.log(
-    `rollup_full: ${rollSec.toFixed(1)}s (${r.rolledDays} listing-days recomputed, ${dailyRows} rows in ListingDailyPrice)`,
-  );
 
   // identity lookup with the same OR shape as findCandidateProducts
   stats(
