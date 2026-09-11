@@ -1,6 +1,7 @@
 # Live beta report
 
-Status: **PARTIALLY LIVE / BLOCKED ON SECRETS** (as of Cursor bring-up continuation)
+Status: **BLOCKED ON SECRETS** (Cursor prep complete; waiting on owner to inject
+`FLY_API_TOKEN` + `DATABASE_URL` into the Cloud Agent environment, then ping this thread)
 
 ## STATUS
 
