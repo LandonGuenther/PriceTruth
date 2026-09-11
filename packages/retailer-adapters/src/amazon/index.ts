@@ -57,6 +57,15 @@ function foreignAsin(el: Element, selfAsins: Set<string>, warnings: string[]): b
   return false;
 }
 
+/** A price element inside a per-unit container is a unit price — reject it. */
+function perUnitPrice(el: Element, warnings: string[]): boolean {
+  if (el.closest(S.unitPriceContainers)) {
+    warnings.push("per-unit price ignored");
+    return true;
+  }
+  return false;
+}
+
 function extractPrice(
   doc: Document,
   warnings: string[],
@@ -65,7 +74,7 @@ function extractPrice(
 ): number | null {
   for (const sel of S.price) {
     for (const el of doc.querySelectorAll(sel)) {
-      if (foreignAsin(el, self, warnings)) continue;
+      if (foreignAsin(el, self, warnings) || perUnitPrice(el, warnings)) continue;
       const cents = parsePriceToCents(text(el));
       if (cents !== null) return cents;
     }
@@ -76,7 +85,7 @@ function extractPrice(
     const box = doc.querySelector(boxSel);
     if (!box) continue;
     for (const el of box.querySelectorAll(S.priceWhole)) {
-      if (foreignAsin(el, self, warnings)) continue;
+      if (foreignAsin(el, self, warnings) || perUnitPrice(el, warnings)) continue;
       const whole = text(el).replace(/[^0-9]/g, "");
       if (!whole) continue;
       const fraction = text(
@@ -97,7 +106,7 @@ function extractPrice(
 function extractReference(doc: Document, warnings: string[], self: Set<string>): number | null {
   for (const sel of S.reference) {
     for (const el of doc.querySelectorAll(sel)) {
-      if (foreignAsin(el, self, warnings)) continue;
+      if (foreignAsin(el, self, warnings) || perUnitPrice(el, warnings)) continue;
       const cents = parsePriceToCents(text(el));
       if (cents !== null) return cents;
     }

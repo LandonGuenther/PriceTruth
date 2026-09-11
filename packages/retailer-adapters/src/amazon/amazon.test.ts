@@ -62,7 +62,7 @@ describe("extract", () => {
       schemaVersion: 1,
       priceType: "STANDARD",
       referenceType: "UNKNOWN",
-      extractorVersion: "1.1.0",
+      extractorVersion: "1.1.1",
     });
     expect(r.observation.variant).toEqual({ Size: "Large" });
   });
@@ -127,6 +127,23 @@ describe("extract", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.observation.priceCents).toBe(29900);
+  });
+
+  it("per-unit price is never adopted; hidden price → no_price", () => {
+    const doc = loadFixture("hidden-price-per-unit.html");
+    const r = amazonAdapter.extract(doc, productUrl("B00MNV8E0C"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("per-unit price ignored");
+  });
+
+  it("visible price wins; per-unit price ignored", () => {
+    const doc = loadFixture("visible-price-per-unit.html");
+    const r = amazonAdapter.extract(doc, productUrl("B00MNV8E0C"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(1299);
   });
 
   it("variant page: child ASIN in #dp is still self", () => {

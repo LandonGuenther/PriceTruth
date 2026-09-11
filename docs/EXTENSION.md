@@ -88,7 +88,8 @@ Known Amazon behaviors seen live (all expected, not bugs):
   never try to bypass.
 - Amazon prices are scoped to buy-box containers; price elements inside a
   `data-asin` subtree belonging to another ASIN (cross-sell carousels) are
-  ignored, and "add to cart to see price" pages report `no_price`.
+  ignored, and "add to cart to see price" pages report `no_price`. Per-unit
+  prices ("$0.27 / count") are likewise never adopted as the product price.
 - `/dp/`, `/gp/product/` and `/gp/aw/d/` forms all ingest identically; revisits
   within the dedup window are accepted as duplicates.
 
