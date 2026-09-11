@@ -6,7 +6,7 @@
 
 ## CURSOR HEAD SHA
 
-`974ed6d4bb010f9becad8c89c54efe6e0be70290` (docs/package commits may follow)
+`cdb3f473cefe951830eb246f1622e4dea28a3689` (docs/package commits may follow)
 
 ## Branch
 
