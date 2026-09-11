@@ -60,7 +60,7 @@ describe("extract", () => {
       schemaVersion: 1,
       priceType: "STANDARD",
       referenceType: "UNKNOWN",
-      extractorVersion: "1.1.0",
+      extractorVersion: "1.1.1",
     });
   });
 

@@ -41,6 +41,9 @@ export const AMAZON_SELECTORS = {
   /** Split-price fallback: whole and fractional parts rendered separately. */
   priceWhole: ".a-price-whole",
   priceFraction: ".a-price-fraction",
+  /** Per-unit price blocks ("$0.27 / count") — never the product's price. */
+  unitPriceContainers:
+    ".apex-priceperunit-value, .pricePerUnit, #pricePerUnit, [class*='priceperunit' i], [class*='PricePerUnit'], [id*='pricePerUnit']",
   /** Page regions whose text is checked for hidden-price messaging. */
   hiddenPriceRegions: "#dp, #centerCol, #ppd",
   /**
