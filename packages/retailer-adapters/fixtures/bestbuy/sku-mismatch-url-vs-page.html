@@ -1,0 +1,35 @@
+<!--
+  URL sku (legacy path) disagrees with page SKU label / JSON-LD. Page wins.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Acme SKU Mismatch Headphones - Best Buy</title>
+    <script type="application/ld+json">
+      {
+        "@context": "http://schema.org/",
+        "@type": "Product",
+        "name": "Acme SKU Mismatch Headphones",
+        "sku": "6588777",
+        "brand": { "@type": "Brand", "name": "Acme" },
+        "offers": {
+          "@type": "Offer",
+          "price": 99.99,
+          "availability": "https://schema.org/InStock",
+          "sku": "6588777"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Acme SKU Mismatch Headphones</h1>
+    <div class="pr-200 inline-block">SKU: <!-- -->6588777</div>
+    <div data-testid="LARGE_profile">
+      <div data-testid="price-block">
+        <div data-testid="price-block-customer-price">
+          <span class="sr-only">$99.99</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
