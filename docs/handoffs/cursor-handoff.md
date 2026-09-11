@@ -15,6 +15,7 @@
 ## New Cursor head SHA
 
 `1bf1c9d0c1ebf59fd4cfe43c8b77fbe5e1458cf4` (branch tip)
+
 ## Branch
 
 `cursor/public-beta-extension`
