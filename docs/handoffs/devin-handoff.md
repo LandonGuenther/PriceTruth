@@ -4,9 +4,10 @@
 
 `5e9dd67` (origin/main at branch point, includes PRs #5–#7).
 
-## DEVIN BRANCH SHA (TBD)
+## DEVIN BRANCH SHA
 
-Branch: `devin/production-backend-beta`. Head: TBD.
+Branch: `devin/production-backend-beta`. Head: `3a93b54` (a handoff-doc
+commit follows and is the final head — rebase onto it).
 
 ## Baseline (M0)
 
@@ -49,12 +50,13 @@ None — new fields are typed API-side (intersection types).
 `REQUEST_TIMEOUT_MS`, `BODY_LIMIT_BYTES`, `INTERNAL_API_TOKEN`,
 `ARCHIVE_BACKEND`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
 `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_REQUEST_TIMEOUT_MS`,
-`APP_VERSION`. All documented in `.env.example`.
+`APP_VERSION`, `SHUTDOWN_TIMEOUT_MS`. All documented in `.env.example`.
 
 ## new API fields
 
 `apiVersion` (success bodies); `/health`: `uptimeSeconds`, `version`;
-`/readiness`: `status`, `checks.{database,migrations}`.
+`/readiness`: `status`, `checks.{database,migrations}`; ingest response
+`status` (the row's ObservationStatus — additive).
 
 ## deprecated fields
 
@@ -140,6 +142,31 @@ ops status` prints the same payload via `getOpsStatus(prisma)` in
   `migrate diff --from-migrations --exit-code`), Docker image build,
   `pnpm audit --prod --audit-level=high` (continue-on-error),
   `deploy-staging.yml` workflow_dispatch scaffold.
+
+## M6 — final regression
+
+| Check                       | Result                                                                                          |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `pnpm lint`                 | pass                                                                                            |
+| `pnpm format:check`         | pass                                                                                            |
+| `pnpm typecheck`            | pass                                                                                            |
+| `pnpm build`                | pass                                                                                            |
+| `pnpm test`                 | 320 tests pass — shared 17, catalog 16, scoring 39, retailer-adapters 92, extension 24, api 132 |
+| fresh DB `migrate deploy`   | 8 migrations applied to empty `pricetruth_scratch`; `migrate status` clean                      |
+| upgrade-path migration test | pass (Path A fresh-deploy + Path B MVP-upgrade, in suite)                                       |
+| archive round-trip test     | pass (export→sha256→read-back→idempotent-rerun, in suite)                                       |
+| docker build                | pass; container `/health` 200, `/readiness` 200 vs compose Postgres                             |
+| `pnpm audit --prod`         | 1 high — deepmerge-ts via prisma CLI dev chain (recorded, accepted)                             |
+
+Post-hardening bench (1M rows, LOG_LEVEL=info, rate limits on, unique
+remoteAddress per request): in docs/PERFORMANCE_BASELINE.md — no p95
+regression >25%.
+
+## security fix folded in
+
+`/internal/metrics` was initially unauthenticated — now requires the same
+Bearer `INTERNAL_API_TOKEN` check as `/internal/status` (404 unset/wrong); both
+internal routes sit in the health rate-limit class.
 
 ## compatibility risks
 
