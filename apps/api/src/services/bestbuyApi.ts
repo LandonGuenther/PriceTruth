@@ -34,6 +34,9 @@ export async function fetchBestBuyProduct(
   apiKey: string,
   fetchImpl: FetchLike = fetch as unknown as FetchLike,
 ): Promise<BestBuyProductInfo | null> {
+  // Defense in depth (also enforced by the observation schema): never build a
+  // URL from anything but a bare numeric SKU — fixed host, no path traversal.
+  if (!/^\d{1,12}$/.test(sku)) return null;
   const url =
     `https://api.bestbuy.com/v1/products(sku=${encodeURIComponent(sku)})` +
     `?apiKey=${encodeURIComponent(apiKey)}&format=json` +

@@ -304,11 +304,35 @@ model ListingDailyPrice {
   @@index([listingId])
 }
 
-/** Durable cursor for batch jobs (rollup, archive). */
+/** Durable cursor for batch jobs (rollup, archive). Doubles as the job lease row. */
 model JobCheckpoint {
-  jobName   String   @id
-  cursor    String
-  updatedAt DateTime @updatedAt
+  jobName     String    @id
+  cursor      String
+  updatedAt   DateTime  @updatedAt
+  /** Worker holding the lease (hostname:pid), null when free. */
+  lockedBy    String?
+  lockedUntil DateTime?
+}
+
+enum JobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED_LOCKED
+}
+
+/** Ledger of batch-job executions. */
+model JobRun {
+  id         BigInt       @id @default(autoincrement())
+  jobName    String
+  startedAt  DateTime     @default(now())
+  finishedAt DateTime?
+  status     JobRunStatus
+  summary    Json?
+  error      String?
+  workerId   String
+
+  @@index([jobName, startedAt])
 }
 
 /** One exported parquet batch (M5) — dedup + integrity record. */

@@ -55,6 +55,7 @@ describeIfDb("migration paths", () => {
       "20260911065530_observation_trust",
       "20260911070434_daily_rollup",
       "20260911070927_archive_batches",
+      "20260911162352_job_leases_and_runs",
     ]);
 
     // Drift check: nothing needed to reach the datamodel except objects Prisma

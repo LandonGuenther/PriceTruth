@@ -5,4 +5,4 @@ coverage/
 *.tsbuildinfo
 dist-types/
 release/
-archive/
+/archive/

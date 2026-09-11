@@ -135,3 +135,28 @@ Archive export cost is per batch and independent of table size, as expected for 
 `id`-cursor scan. (In the 5M run one of the two sampled batches already existed and was
 idempotently skipped, so the raw log's per-row figure for that run is halved; the per-batch
 figure above is the consistent one.)
+
+## Post-production-hardening re-run — 1,000,200 observations (2,000 listings)
+
+Same bench script, run with the production request path intact:
+`LOG_LEVEL=info` (one JSON access-log line per request) and the real
+per-IP rate limiter enabled — each of the 200 measured requests carries a
+unique `remoteAddress` (`10.0.x.x`) so the limiter is exercised but never
+trips. Sequential, same 50-listing sample, in-process `app.inject`.
+
+| Metric                                                  | Pre-hardening 1M   | Post-hardening 1M         | Δ p95 |
+| ------------------------------------------------------- | ------------------ | ------------------------- | ----- |
+| latest p50 / p95                                        | 2.4 / 2.8 ms       | 2.1 / 2.8 ms              | 0%    |
+| history 90 d p50 / p95                                  | 11.0 / 12.0 ms     | 11.4 / 14.5 ms            | +21%  |
+| history 180 d p50 / p95                                 | 15.7 / 19.5 ms     | 16.4 / 19.6 ms            | +1%   |
+| analysis p50 / p95                                      | 15.4 / 18.5 ms     | 17.1 / 19.3 ms            | +4%   |
+| identity lookup p50 / p95                               | 1.4 / 2.3 ms       | 1.4 / 1.6 ms              | −30%  |
+| full daily rollup                                       | 65.3 s (547k days) | 76.5 s (547k days)        | +17%  |
+| archive export (150k rows, 3 batches incl. checkpoints) | 5.1 s/50k          | 11.8 s total (~3.9 s/50k) | −23%  |
+| table + indexes                                         | 212 MB             | 212 MB                    | —     |
+
+No p95 regression exceeds the 25% flag threshold (largest: history90 +21%,
+within n=50 sequential noise). The hardening additions — access log, metrics
+hooks, version/request-id headers, rate-limit accounting — cost ≈0.5–1.5 ms
+per request at 1M rows. Rollup +17% likely reflects the added
+signal/heartbeat checks per batch plus log I/O, still ~7.2k listing-days/s.
