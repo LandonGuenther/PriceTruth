@@ -20,7 +20,12 @@ export function assertProductionApiUrl(url: string | undefined | null): string {
     throw new Error(`VITE_API_BASE_URL must be an http(s) URL (got ${trimmed})`);
   }
   const host = parsed.hostname.toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]"
+  ) {
     throw new Error(
       `VITE_API_BASE_URL must not point at localhost for production packaging (got ${trimmed}). ` +
         "Set it to the deployed API origin.",
