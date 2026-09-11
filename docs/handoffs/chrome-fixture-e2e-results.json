@@ -1,0 +1,123 @@
+{
+  "steps": [
+    {
+      "name": "extension_installs",
+      "pass": true,
+      "detail": {
+        "installedId": "hkpcfcjmogoaakoemandjkkdgnhpdejk",
+        "pinnedId": "hkpcfcjmogoaakoemandjkkdgnhpdejk"
+      }
+    },
+    {
+      "name": "amazon_fixture_loads",
+      "pass": true,
+      "detail": "Acme Demo Widget 3000"
+    },
+    {
+      "name": "amazon_observation_ingest",
+      "pass": true,
+      "detail": {
+        "count": "1"
+      }
+    },
+    {
+      "name": "amazon_analysis_returns",
+      "pass": true,
+      "detail": {
+        "confidence": "INSUFFICIENT",
+        "hasDealScore": true
+      }
+    },
+    {
+      "name": "sidepanel_storage_updates_amazon",
+      "pass": true,
+      "detail": {
+        "keys": [
+          "tab:594546828"
+        ],
+        "tabStates": [
+          {
+            "key": "tab:594546828",
+            "status": "ready",
+            "externalId": "B0DEMOASIN"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sidepanel_opens",
+      "pass": true,
+      "detail": "chrome-extension://hkpcfcjmogoaakoemandjkkdgnhpdejk/sidepanel.html"
+    },
+    {
+      "name": "bestbuy_fixture_loads",
+      "pass": true,
+      "detail": "Acme 55\" TV"
+    },
+    {
+      "name": "bestbuy_observation_ingest",
+      "pass": true,
+      "detail": {
+        "count": "1"
+      }
+    },
+    {
+      "name": "bestbuy_analysis_returns",
+      "pass": true,
+      "detail": {
+        "confidence": "INSUFFICIENT"
+      }
+    },
+    {
+      "name": "ambiguous_never_posts",
+      "pass": true,
+      "detail": {
+        "ambigAfter": "0",
+        "beforeAmbig": "0",
+        "ambigPosts": 0,
+        "ambigStateStatus": "ambiguous"
+      }
+    },
+    {
+      "name": "stale_nav_product_a_to_b",
+      "pass": true,
+      "detail": {
+        "showingAOnB": false,
+        "obsB": "1",
+        "tabEntries": [
+          {
+            "key": "tab:594546828",
+            "status": "ready",
+            "id": "B0TYPICALX"
+          },
+          {
+            "key": "tab:594546829",
+            "status": "idle"
+          },
+          {
+            "key": "tab:594546831",
+            "status": "idle"
+          },
+          {
+            "key": "tab:594546833",
+            "status": "idle"
+          },
+          {
+            "key": "tab:594546835",
+            "status": "idle"
+          },
+          {
+            "key": "tab:594546837",
+            "status": "idle"
+          }
+        ]
+      }
+    }
+  ],
+  "ok": true,
+  "chrome": "/tmp/pt-e2e/cft/chrome-linux64/chrome",
+  "method": "puppeteer-pipe-loadUnpacked",
+  "apiPostsSample": [],
+  "apiPostCount": 0,
+  "summary": "ALL_PASS"
+}

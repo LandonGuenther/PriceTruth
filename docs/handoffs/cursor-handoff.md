@@ -14,7 +14,7 @@
 
 ## New Cursor head SHA
 
-`79426831a90cbf602a749a5c0abd844e433b5dd6` (branch tip)
+`5826f44f1ff94a9ddd6e720d045f98113405670f` (branch tip before this handoff commit; tip advances with this doc)
 
 ## Branch
 
@@ -50,7 +50,15 @@ Client version via `x-pricetruth-client-version`. No fabricated confidence/trust
 `not_product_page`, `no_identifier`, `no_price`, `ambiguous_price`, `invalid` never call `POST /v1/observations`.
 Backend owns trust/quarantine; extension owns safe extraction.
 
-## Test totals (re-verified after CREATEDB grant)
+## CODE STATUS: GREEN
+
+Extension-owned correctness, packaging gates, and local Chrome fixture E2E against API+Postgres all pass. No known code blockers in Cursor-owned surfaces.
+
+## BETA RELEASE STATUS: BLOCKED
+
+Limited public beta is not release-ready until ops staging URL exists and live-retailer PDP validation is signed off. Missing staging URL is an ops/release blocker, not a code failure.
+
+## Test totals (re-run 2026-09-11)
 
 | Suite | Result |
 | --- | --- |
@@ -65,6 +73,8 @@ Backend owns trust/quarantine; extension owns safe extraction.
 | `pnpm build` | pass |
 | `pnpm test` (full monorepo) | **pass** |
 
+Note: full `pnpm test` truncates the DEV API database. Re-run fixture Chrome E2E after gates if DB evidence is needed.
+
 ## Package verification
 
 - `VITE_API_BASE_URL=https://api-staging.pricetruth.example pnpm --filter @pricetruth/extension build && package && verify-package`
@@ -73,17 +83,39 @@ Backend owns trust/quarantine; extension owns safe extraction.
 - Clean of localhost, `.env`, secrets, tests, fixtures, `node_modules`, source maps
 - Stable extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`
 
-## Runtime E2E
+## Chrome unpacked fixture E2E (local API + Postgres) — PASS
 
-Local merged API + DB:
+Method: Chrome for Testing 153 + puppeteer-core `pipe: true` + `Extensions.loadUnpacked` (branded Chrome 148 removed `--load-extension`; CDP loadUnpacked requires `--enable-unsafe-extension-debugging` + remote-debugging-pipe).
 
-- Valid observation → analysis → history: pass
-- Insufficient history (`confidence.level = "INSUFFICIENT"`): pass
-- Ambiguous/no-price never ingest (handler + API): pass
-- Stale navigation protection: pass
-- Live bodies parse through extension validators: pass
+Fixture HTTPS on `:443` via setcap node; `--host-resolver-rules` maps amazon.com / bestbuy.com to `127.0.0.1`; `--ignore-certificate-errors`.
 
-Chrome unpacked load: headless screenshot of `chrome-extension://` side panel returned `ERR_BLOCKED_BY_CLIENT` (headless extension limitation). Live Amazon/Best Buy PDP side-panel confirmation remains a manual daytime pass.
+Extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`. Dist host_permissions: `http://127.0.0.1:3000/*`.
+
+Checklist:
+
+| Check | Result |
+| --- | --- |
+| Extension installs (loadUnpacked) | PASS |
+| Side panel opens | PASS |
+| Amazon fixture `B0DEMOASIN` extracts ($299 / list $499) | PASS |
+| Best Buy fixture `6418599` extracts ($279.99 / was $399.99) | PASS |
+| Observation reaches API/DB | PASS (amazon 29900, bestbuy 27999, B0TYPICALX 4499) |
+| Analysis returns | PASS (`confidence.level=INSUFFICIENT`, dealScore present) |
+| Side panel updates | PASS (ready states for A/BB/B; ambiguous UI) |
+| Ambiguous `B0AMBIGPR1` never POSTs | PASS (DB count stayed 0; panel: nothing recorded) |
+| Nav Product A → B no stale A | PASS (tab state `B0TYPICALX` ready; not showing `B0DEMOASIN`) |
+
+Artifacts (agent run):
+
+- `/opt/cursor/artifacts/chrome-fixture-e2e-results.json` (`ALL_PASS`)
+- `/opt/cursor/artifacts/e2e-db-evidence.txt`
+- `/opt/cursor/artifacts/panel_amazon_ready.png`
+- `/opt/cursor/artifacts/panel_bestbuy_ready.png`
+- `/opt/cursor/artifacts/panel_ambiguous.png`
+- `/opt/cursor/artifacts/panel_product_b_ready.png`
+- `/opt/cursor/artifacts/chrome_fixture_e2e_full_checklist.mp4`
+- `/opt/cursor/artifacts/sidepanel_amazon_bestbuy_ready_states.mp4`
+- `/opt/cursor/artifacts/repo-gates.log`
 
 ## Production / staging endpoint status
 
@@ -92,26 +124,29 @@ Chrome unpacked load: headless screenshot of `chrome-extension://` side panel re
 - Verified with placeholder `https://api-staging.pricetruth.example` only
 - Do not hard-code a fake production URL
 
-## Remaining issues
+## Remaining issues (triaged)
 
-### P0
+### CODE BLOCKERS
 
-- None known in extension-owned code.
+- None known in extension-owned code after local Chrome fixture E2E + monorepo gates.
 
-### P1
+### RELEASE / OPERATIONS BLOCKERS
 
-- Real staging/production HTTPS origin still unpublished (blocks a real testers zip).
-- Manual Chrome PDP confirmation on live Amazon/Best Buy still required.
+- Real staging/production HTTPS origin still unpublished (`docs/STAGING_DEPLOYMENT.md` = PLANNED). Blocks shipping a real testers zip (placeholder package only).
+- Chrome Web Store / distribution / allowlist ops for pinned id `hkpcfcjmogoaakoemandjkkdgnhpdejk` still owner-side.
+- Note: branded Google Chrome 148+ dropped `--load-extension`; automated load needs Chrome for Testing / Chromium, or CDP `Extensions.loadUnpacked` with `--enable-unsafe-extension-debugging`, or manual Load unpacked.
 
-### P2
+### MANUAL LIVE-RETAILER VALIDATION
 
-- Real-world matrix rows still placeholders.
-- Optional Chrome fixture E2E harness can expand; CI stays unit/fixture based.
+- Live Amazon / Best Buy PDP confirmation on real retailer pages (CAPTCHA, layout drift, buy-box variants) still required before calling beta "field validated."
+- Real-world matrix rows remain placeholders.
 
 ## PR posture
 
-Keep PR #8 **draft** while P1 remains (staging URL + manual PDP). Do not merge from the agent.
+Keep PR #8 **draft** while RELEASE/OPS + MANUAL LIVE-RETAILER items remain. Do not merge from the agent.
+
+`gh` cannot update PR bodies in this environment (read-only integration). Handoff in-repo is the durable status record; parent agent should refresh PR #8 summary from this file if ManagePullRequest is available.
 
 ## Do not merge order
 
-Devin main already merged. Cursor PR merges after P1 clearance and reviewer approval.
+Devin main already merged. Cursor PR merges after release/ops staging URL + live PDP sign-off and reviewer approval.
