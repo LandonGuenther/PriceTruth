@@ -14,7 +14,7 @@
 
 ## New Cursor head SHA
 
-`1b7e2a5a44959f01e7edfdcfc2ed0929e5686201` (branch tip)
+`8a9d2267cb33aa716091c4f0aa2ce66ff00e313b` (branch tip; update again after this commit)
 
 ## Branch
 
