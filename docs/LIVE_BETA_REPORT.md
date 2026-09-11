@@ -87,6 +87,12 @@ No legitimate retailer observations written from this agent session yet (API not
 
 See `docs/COSTS.md`. Target monthly baseline well under $25 (small Fly VM + existing Neon).
 
+## CREDENTIAL POLICY (solo / pre-company)
+
+- `BESTBUY_API_KEY`: **not required** for beta launch. Official Best Buy API refresh stays `NOT CONFIGURED` until a personal/company Best Buy developer key exists. Browser-extension Best Buy observations still work later without it.
+- `INTERNAL_API_TOKEN`: **not required from owner**. Generated securely at deploy time and stored only in Fly secrets (never committed).
+- Required for deploy: `FLY_API_TOKEN` + `DATABASE_URL` (personal Fly + existing Neon project are enough).
+
 ## OWNER ACTIONS (unavoidable)
 
 1. Provide Cursor secure secrets: `FLY_API_TOKEN`, `DATABASE_URL` (or `NEON_API_KEY`).
