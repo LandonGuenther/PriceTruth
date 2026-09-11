@@ -204,7 +204,7 @@ export function EmptyStates({
   message,
   onRetry,
 }: {
-  kind: "idle" | "unsupported" | "loading" | "error";
+  kind: "idle" | "unsupported" | "ambiguous" | "loading" | "error";
   reason?: string;
   message?: string;
   onRetry?: () => void;
@@ -221,6 +221,7 @@ export function EmptyStates({
           {reason === "no_price" && <p>{COPY.noPrice}</p>}
         </>
       )}
+      {kind === "ambiguous" && <p>{message ?? COPY.ambiguous}</p>}
       {kind === "error" && (
         <>
           <p>{message}</p>

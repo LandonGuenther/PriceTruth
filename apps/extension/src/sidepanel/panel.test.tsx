@@ -84,6 +84,7 @@ const ready: TabState = {
   history,
   ingest: { accepted: true, duplicate: false },
   updatedAt: "2025-06-30T12:00:00.000Z",
+  generation: 1,
 };
 
 afterEach(cleanup);
@@ -150,6 +151,7 @@ describe("Panel", () => {
           observation,
           message: "Could not reach the service.",
           updatedAt: "",
+          kind: "network",
         }}
         onRetry={() => (retried = true)}
       />,
@@ -158,5 +160,21 @@ describe("Panel", () => {
     expect(btn).toBeTruthy();
     btn.click();
     expect(retried).toBe(true);
+  });
+
+  it("ambiguous state explains that nothing was recorded", () => {
+    render(
+      <Panel
+        state={{
+          status: "ambiguous",
+          retailer: "bestbuy",
+          url: "https://www.bestbuy.com/site/x/1.p",
+          warnings: [],
+          message:
+            "We found this product but could not confidently determine its current price. Nothing was recorded.",
+        }}
+      />,
+    );
+    expect(screen.getByText(/could not confidently determine/)).toBeTruthy();
   });
 });

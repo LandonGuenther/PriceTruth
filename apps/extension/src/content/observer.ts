@@ -10,7 +10,7 @@ export interface ObserverDeps {
   setInterval: (fn: () => void, ms: number) => unknown;
   clearInterval: (handle: unknown) => void;
   setTimeout: (fn: () => void, ms: number) => unknown;
-  /** Subscribe to DOM mutations; must call the callback (already) debounced or not — we debounce. */
+  /** Subscribe to DOM mutations; must call the callback (already) debounced or not - we debounce. */
   observeDomMutations: (cb: () => void) => () => void;
 }
 
@@ -83,7 +83,11 @@ export function startObserver(deps: ObserverDeps): { stop: () => void } {
     }
     lastSignature = signature;
     lastSent = { signature, at: now.getTime() };
-    deps.send({ type: "pt/observation", observation: o });
+    deps.send({
+      type: "pt/observation",
+      observation: o,
+      ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+    });
   };
 
   const interval = deps.setInterval(() => {

@@ -27,6 +27,8 @@ export const COPY = {
   idle: `Open a supported product page on ${retailerNames}.`,
   unsupported: "This page isn't a supported product page.",
   noPrice: "We couldn't read a price on this page, so nothing was recorded.",
+  ambiguous:
+    "We found this product but could not confidently determine its current price. Nothing was recorded.",
   loading: "Reading price evidence…",
   retry: "Retry",
   insufficientNotice: (count: number) =>
