@@ -57,6 +57,21 @@ time.
 Archive export details (S3 backend, integrity rules, `--dry-run`) are in
 docs/ARCHIVE_FORMAT.md.
 
+## Best Buy known-listing refresh (IMPLEMENTED)
+
+`pnpm --filter @pricetruth/api jobs bestbuy-refresh [--min-age-hours 6] [--max-listings 200]`
+re-reads known `bestbuy` listings from the official Products API
+(`apps/api/src/jobs/bestbuyRefresh.ts`) and appends `bestbuy:products-api`
+observations through the same `recordBestBuyApiObservation` path used by
+ingest-time enrichment (60-minute dedup, `priceType=STANDARD`,
+`referenceType=REGULAR_PRICE`, `synthetic=false`). Listings are visited oldest
+official-API observation first (never-refreshed first), one request at a time
+with a 1 s pause; listings refreshed within `--min-age-hours` are skipped.
+Append-only — existing rows are never modified. Prints
+`disabled (BESTBUY_API_KEY not set)` and exits 0 without taking a lease when the
+key is absent; otherwise runs under the `bestbuy-refresh` lease/JobRun ledger
+with summary `{candidates, recorded, duplicate, error, skipped}`.
+
 ## IMPLEMENTED vs PLANNED
 
 IMPLEMENTED: repository boundary; on-demand `getDailyHistory` (raw rows →
