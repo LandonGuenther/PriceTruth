@@ -15,6 +15,16 @@ pnpm --filter @pricetruth/extension build   # → apps/extension/dist
 Rebuild after changes and hit the extension's "reload" icon. Content-script
 changes also need a page reload.
 
+## Per-tab state & navigation
+
+`TabState` lives in `chrome.storage.session` under `tab:<tabId>` (in-memory
+only). `tabs.onRemoved` clears it. `tabs.onUpdated` resets to `idle` only when
+`changeInfo.url` is present AND its `origin + pathname` differs from the stored
+observation's URL — pathname carries the ASIN/SKU, so query-only churn (e.g.
+Amazon's `?th=1` replaceState, or the extra `loading` event Amazon fires after
+the content script's observation) keeps the ready state. See
+`shouldResetOnNavigation` in `src/background/handler.ts`.
+
 ## Environment
 
 `VITE_API_BASE_URL` (build-time) sets the API origin — it becomes the only

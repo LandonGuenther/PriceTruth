@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { AnalysisResponse, HistoryResponse, RetailerObservation } from "@pricetruth/shared";
 import { OBSERVATION_SOURCES } from "@pricetruth/shared";
 import { ApiError, type IngestResponse } from "./api.js";
-import { handleMessage, type HandlerDeps, type HandlerStorage } from "./handler.js";
+import {
+  handleMessage,
+  shouldResetOnNavigation,
+  type HandlerDeps,
+  type HandlerStorage,
+} from "./handler.js";
 import { tabStateKey, type TabState } from "../messages.js";
 
 const NOW = new Date("2025-06-30T12:00:00Z");
@@ -148,5 +153,38 @@ describe("handleMessage", () => {
     await handleMessage({ type: "pt/retry", tabId: 5 }, undefined, deps);
     expect(store.get(tabStateKey(5))?.status).toBe("ready");
     expect(calls).toContain(`set:${tabStateKey(5)}:loading`);
+  });
+});
+
+describe("shouldResetOnNavigation", () => {
+  const ready = {
+    status: "ready",
+    observation,
+    analysis,
+    history,
+    ingest: { accepted: true, duplicate: false },
+    updatedAt: "",
+  } satisfies TabState;
+
+  it("same path + different query → false (replaceState variant switch)", () => {
+    expect(shouldResetOnNavigation(ready, "https://www.amazon.com/dp/B0TESTASIN?th=1&psc=1")).toBe(
+      false,
+    );
+  });
+
+  it("different path → true", () => {
+    expect(shouldResetOnNavigation(ready, "https://www.amazon.com/dp/B0OTHERASI")).toBe(true);
+  });
+
+  it("no observation in prev → true", () => {
+    expect(shouldResetOnNavigation({ status: "idle" }, "https://www.amazon.com/dp/X")).toBe(true);
+    expect(shouldResetOnNavigation(undefined, "https://www.amazon.com/dp/X")).toBe(true);
+    expect(
+      shouldResetOnNavigation({ status: "unsupported", retailer: "amazon" }, "https://a.com/"),
+    ).toBe(true);
+  });
+
+  it("invalid URL → true", () => {
+    expect(shouldResetOnNavigation(ready, "not a url")).toBe(true);
   });
 });

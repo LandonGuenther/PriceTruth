@@ -56,6 +56,32 @@ async function runObservation(
   }
 }
 
+/**
+ * Should a navigation reset the tab state to idle? Reset only on a real page
+ * change (different origin+pathname — the pathname carries the ASIN/SKU for
+ * both retailers, so query-only replaceState churn keeps state). Anything
+ * without a stored observation, and unparseable URLs, resets.
+ */
+export function shouldResetOnNavigation(prev: TabState | undefined, newUrl: string): boolean {
+  let next: URL;
+  try {
+    next = new URL(newUrl);
+  } catch {
+    return true;
+  }
+  const prevUrl =
+    prev && (prev.status === "loading" || prev.status === "ready" || prev.status === "error")
+      ? prev.observation?.url
+      : undefined;
+  if (!prevUrl) return true;
+  try {
+    const p = new URL(prevUrl);
+    return p.origin + p.pathname !== next.origin + next.pathname;
+  } catch {
+    return true;
+  }
+}
+
 export async function handleMessage(
   msg: RuntimeMessage,
   tabId: number | undefined,

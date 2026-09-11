@@ -37,7 +37,9 @@ const TIMEOUT_MS = 10_000;
 export class ApiClient {
   constructor(
     private readonly baseUrl: string,
-    private readonly fetchImpl: FetchFn = fetch,
+    // Wrap rather than store `fetch` directly: calling a stored bare `fetch`
+    // throws "Illegal invocation" in Chrome (non-global this).
+    private readonly fetchImpl: FetchFn = (url, init) => fetch(url, init),
     private readonly clientVersion: string = "dev",
   ) {}
 

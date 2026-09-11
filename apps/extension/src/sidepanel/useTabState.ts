@@ -12,12 +12,9 @@ export interface ChromeLike {
     session: {
       get(key: string): Promise<Record<string, TabState>>;
       onChanged: {
-        addListener(
-          cb: (changes: Record<string, { newValue?: TabState }>, area: string) => void,
-        ): void;
-        removeListener(
-          cb: (changes: Record<string, { newValue?: TabState }>, area: string) => void,
-        ): void;
+        // StorageArea.onChanged fires with only (changes) — no area argument.
+        addListener(cb: (changes: Record<string, { newValue?: TabState }>) => void): void;
+        removeListener(cb: (changes: Record<string, { newValue?: TabState }>) => void): void;
       };
     };
   };
@@ -52,8 +49,8 @@ export function useTabState(chromeApi: ChromeLike = chrome as unknown as ChromeL
     void refresh();
 
     const onActivated = () => void refresh();
-    const onChanged = (changes: Record<string, { newValue?: TabState }>, area: string) => {
-      if (area !== "session" || tabId === undefined) return;
+    const onChanged = (changes: Record<string, { newValue?: TabState }>) => {
+      if (tabId === undefined) return;
       const change = changes[tabStateKey(tabId)];
       if (change) setState(change.newValue ?? { status: "idle" });
     };
