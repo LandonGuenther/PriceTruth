@@ -8,6 +8,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
+import net from "node:net";
+import { fetchBestBuyProduct } from "../src/services/bestbuyApi.js";
 import type { PrismaClient } from "@prisma/client";
 import { buildApp } from "../src/app.js";
 import {
@@ -296,6 +298,97 @@ describeIfDb("adversarial request handling", () => {
     });
   });
 
+  describe("protocol-level hardening", () => {
+    it("duplicate query params (?days=1&days=2) → 400 not 500", async () => {
+      const app = await makeApp();
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/listings/amazon/B000000001/history?days=1&days=2",
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it("200-level nested JSON body → 400 (schema), not a crash", async () => {
+      const app = await makeApp();
+      let nested: unknown = {};
+      for (let i = 0; i < 200; i++) nested = { a: nested };
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/observations",
+        headers: { "content-type": "application/json" },
+        payload: JSON.stringify(nested),
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it("array body → 400", async () => {
+      const app = await makeApp();
+      const res = await post(app, [secObs()]);
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it("undersized Content-Length handled without crash (socket closes, server stays up)", async () => {
+      const app = await makeApp(testConfig({ REQUEST_TIMEOUT_MS: 400 }));
+      await app.listen({ port: 0, host: "127.0.0.1" });
+      const port = (app.server.address() as net.AddressInfo).port;
+      const closed = await new Promise<boolean>((resolve) => {
+        const sock = net.connect(port, "127.0.0.1", () => {
+          sock.write(
+            "POST /v1/observations HTTP/1.1\r\n" +
+              "Host: 127.0.0.1\r\n" +
+              "Content-Type: application/json\r\n" +
+              "Content-Length: 9999\r\n" + // body is far shorter
+              "\r\n" +
+              "{}",
+          );
+        });
+        sock.on("close", () => resolve(true));
+        sock.on("error", () => resolve(true));
+        setTimeout(() => {
+          sock.destroy();
+          resolve(true);
+        }, 3000);
+      });
+      expect(closed).toBe(true);
+      // server still healthy after the malformed request
+      const res = await app.inject({ method: "GET", url: "/health" });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    }, 10_000);
+
+    it("requestTimeout config is applied to the server", async () => {
+      const app = await makeApp(testConfig({ REQUEST_TIMEOUT_MS: 4321 }));
+      expect(app.server.requestTimeout).toBe(4321);
+      await app.close();
+    });
+
+    it("hostile x-request-id is not echoed raw", async () => {
+      const app = await makeApp();
+      const res = await app.inject({
+        method: "GET",
+        url: "/health",
+        headers: { "x-request-id": `bad id with spaces and ${"x".repeat(300)}` },
+      });
+      expect(res.headers["x-request-id"]).toMatch(/^[A-Za-z0-9._-]{1,128}$/);
+      await app.close();
+    });
+
+    it("security headers on /v1: nosniff, no-store, no-referrer", async () => {
+      const app = await makeApp();
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/listings/amazon/B000000001/history",
+      });
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["cache-control"]).toBe("no-store");
+      expect(res.headers["referrer-policy"]).toBe("no-referrer");
+      await app.close();
+    });
+  });
+
   describe("rate limiting", () => {
     it("read class: 241st GET analysis from one address → 429", async () => {
       const app = await makeApp();
@@ -350,6 +443,23 @@ describeIfDb("adversarial request handling", () => {
       expect(last).toBe(429);
       await app.close();
     });
+  });
+});
+
+describe("SSRF: bestbuy enrichment URL construction", () => {
+  it("non-numeric SKUs are rejected before any fetch", async () => {
+    const seen: string[] = [];
+    const spy = async (url: string) => {
+      seen.push(url);
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+    for (const sku of ["1/../../evil", "123;rm -rf", "abc", "6418599.evil.com", ""]) {
+      expect(await fetchBestBuyProduct(sku, "k", spy)).toBeNull();
+    }
+    expect(seen).toHaveLength(0);
+    const ok = await fetchBestBuyProduct("6418599", "k", spy);
+    expect(ok).toBeNull(); // api returned {} — no salePrice
+    expect(seen[0]).toMatch(/^https:\/\/api\.bestbuy\.com\/v1\/products\(sku=6418599\)/);
   });
 });
 

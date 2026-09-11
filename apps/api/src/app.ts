@@ -112,7 +112,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     void reply
       .header(API_VERSION_HEADER, String(API_VERSION))
       .header(OBSERVATION_SCHEMA_VERSION_HEADER, String(OBSERVATION_SCHEMA_VERSION))
-      .header("x-request-id", request.id);
+      .header("x-request-id", request.id)
+      .header("x-content-type-options", "nosniff")
+      .header("referrer-policy", "no-referrer");
+    if (
+      request.routeOptions?.url?.startsWith("/v1") ||
+      request.routeOptions?.url?.startsWith("/internal")
+    ) {
+      void reply.header("cache-control", "no-store");
+    }
   });
 
   app.setNotFoundHandler((_request, reply) => {

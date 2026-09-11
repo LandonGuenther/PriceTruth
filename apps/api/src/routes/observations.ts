@@ -19,6 +19,11 @@ export function observationRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      const idempotencyKey = request.headers["idempotency-key"];
+      if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
+        // Logged for observability only — not stored (see docs/IDEMPOTENCY.md).
+        request.log.info({ idempotencyKey }, "idempotency key supplied");
+      }
       const body = request.body as { schemaVersion?: unknown } | undefined;
       if (
         typeof body?.schemaVersion === "number" &&

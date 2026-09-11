@@ -26,9 +26,7 @@ interface S3ErrorLike {
 const isNotFound = (e: unknown): boolean => {
   const err = e as S3ErrorLike;
   return (
-    err?.$metadata?.httpStatusCode === 404 ||
-    err?.name === "NotFound" ||
-    err?.name === "NoSuchKey"
+    err?.$metadata?.httpStatusCode === 404 || err?.name === "NotFound" || err?.name === "NoSuchKey"
   );
 };
 
@@ -37,8 +35,7 @@ const isPreconditionFailed = (e: unknown): boolean => {
   return err?.$metadata?.httpStatusCode === 412 || err?.name === "PreconditionFailed";
 };
 
-const sha256hex = (bytes: Uint8Array): string =>
-  createHash("sha256").update(bytes).digest("hex");
+const sha256hex = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
 const sha256b64 = (bytes: Uint8Array): string =>
   createHash("sha256").update(bytes).digest("base64");
@@ -51,7 +48,10 @@ const contentType = (key: string): string | undefined => {
 
 async function bodyToBytes(body: unknown): Promise<Uint8Array> {
   if (body instanceof Uint8Array) return body;
-  if (body && typeof (body as { transformToByteArray?: unknown }).transformToByteArray === "function") {
+  if (
+    body &&
+    typeof (body as { transformToByteArray?: unknown }).transformToByteArray === "function"
+  ) {
     return (body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray();
   }
   if (body && Symbol.asyncIterator in Object(body)) {
