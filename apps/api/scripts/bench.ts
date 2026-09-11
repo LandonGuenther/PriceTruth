@@ -64,47 +64,45 @@ async function main() {
   };
   const app = await buildApp({ prisma, config });
 
-  stats(
-    "latest",
-    await Promise.all(sample.map((l) => time(() => repo.getCurrentObservation(l.id)))),
-  );
+  // sequential requests, one unique remoteAddress each so the per-IP
+  // rate limiter never trips; every response must be 200
+  const get = async (i: number, url: string) => {
+    const res = await app.inject({
+      method: "GET",
+      url,
+      remoteAddress: `10.0.${i >> 8}.${i & 255}`,
+    });
+    if (res.statusCode !== 200)
+      throw new Error(`GET ${url} -> ${res.statusCode}: ${res.body.slice(0, 200)}`);
+    return res;
+  };
+  const runSeq = async <T>(fns: (() => Promise<T>)[]): Promise<number[]> => {
+    const out: number[] = [];
+    for (const f of fns) out.push(await time(f));
+    return out;
+  };
+
+  stats("latest", await runSeq(sample.map((l) => () => repo.getCurrentObservation(l.id))));
   stats(
     "history90",
-    await Promise.all(
-      sample.map((l) =>
-        time(() =>
-          app.inject({
-            method: "GET",
-            url: `/v1/listings/${l.retailerId}/${l.externalId}/history?days=90`,
-          }),
-        ),
+    await runSeq(
+      sample.map(
+        (l, i) => () => get(i, `/v1/listings/${l.retailerId}/${l.externalId}/history?days=90`),
       ),
     ),
   );
   stats(
     "history180",
-    await Promise.all(
-      sample.map((l) =>
-        time(() =>
-          app.inject({
-            method: "GET",
-            url: `/v1/listings/${l.retailerId}/${l.externalId}/history?days=180`,
-          }),
-        ),
+    await runSeq(
+      sample.map(
+        (l, i) => () => get(i, `/v1/listings/${l.retailerId}/${l.externalId}/history?days=180`),
       ),
     ),
   );
   stats(
     "analysis",
-    await Promise.all(
-      sample.map((l) =>
-        time(() =>
-          app.inject({
-            method: "GET",
-            url: `/v1/listings/${l.retailerId}/${l.externalId}/analysis`,
-          }),
-        ),
-      ),
+    await runSeq(
+      sample.map((l, i) => () => get(i, `/v1/listings/${l.retailerId}/${l.externalId}/analysis`)),
     ),
   );
 
@@ -131,9 +129,9 @@ async function main() {
   // identity lookup with the same OR shape as findCandidateProducts
   stats(
     "identity_lookup",
-    await Promise.all(
-      sample.map((l) =>
-        time(() =>
+    await runSeq(
+      sample.map(
+        (l) => () =>
           prisma.productIdentifier.findMany({
             where: {
               OR: [
@@ -145,7 +143,6 @@ async function main() {
               ],
             },
           }),
-        ),
       ),
     ),
   );
