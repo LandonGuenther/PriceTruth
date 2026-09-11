@@ -14,7 +14,7 @@ The exact scoring rules are specified in [docs/SCORING.md](docs/SCORING.md).
 - pnpm 10 workspaces monorepo, Node >= 22, TypeScript (strict, NodeNext)
 - Vitest for tests, ESLint 9 flat config + Prettier
 - Postgres 16 via docker compose
-- Chrome extension + API (added in later phases)
+- Chrome MV3 extension (React + Vite) and Fastify + Prisma API
 
 ## Quickstart
 
@@ -34,9 +34,9 @@ pnpm test
 | `packages/scoring`           | `@pricetruth/scoring`           | Pure, deterministic scoring per `docs/SCORING.md`; no I/O, no retailer-specific logic          |
 | `packages/retailer-adapters` | `@pricetruth/retailer-adapters` | Pure DOM extraction of `RetailerObservation`s for Amazon/Best Buy product pages                |
 | `apps/api`                   | `@pricetruth/api`               | Fastify 5 + Prisma 6 + Postgres: observation ingest, analysis, history                         |
-| `apps/*`                     | —                               | Chrome extension (later phase)                                                                 |
+| `apps/extension`             | `@pricetruth/extension`         | Chrome MV3 side-panel extension (React + Vite)                                                 |
 
-See also: [docs/API.md](docs/API.md), [docs/DATA_MODEL.md](docs/DATA_MODEL.md).
+See also: [docs/API.md](docs/API.md), [docs/DATA_MODEL.md](docs/DATA_MODEL.md), [docs/EXTENSION.md](docs/EXTENSION.md).
 
 ### API quickstart
 
@@ -46,4 +46,12 @@ cp .env.example .env
 pnpm --filter @pricetruth/api db:migrate   # apply migrations
 pnpm --filter @pricetruth/api db:seed      # seed retailers (idempotent; also lazy)
 pnpm --filter @pricetruth/api start        # serves on 127.0.0.1:3000
+```
+
+### Extension quickstart
+
+```sh
+pnpm --filter @pricetruth/extension build    # → apps/extension/dist
+# chrome://extensions → Developer mode → Load unpacked → apps/extension/dist
+pnpm --filter @pricetruth/extension package  # zips dist → release/
 ```
