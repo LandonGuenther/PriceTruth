@@ -3,7 +3,7 @@
 Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
 `apps/api/prisma/migrations` (in order): `init`, `data_foundation`,
 `catalog_identity`, `catalog_identity_model_backfill`, `observation_trust`,
-`daily_rollup`, `archive_batches`.
+`daily_rollup`, `archive_batches`, `job_leases_and_runs`.
 
 ## Entities
 
@@ -65,7 +65,11 @@ Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
   keyed `@@unique([listingId, day])`; not yet read by analysis (PLANNED —
   docs/DATA_PLATFORM.md).
 - **JobCheckpoint** — durable cursor rows (`jobName`, `cursor`, `updatedAt`)
-  for batch jobs (`rollup:*`, `archive:*`).
+  for batch jobs (`rollup:*`, `archive:*`); also carries the job lease
+  (`lockedBy`, `lockedUntil`).
+- **JobRun** — ledger of batch-job executions (`jobName`, `startedAt`,
+  `finishedAt`, `status` RUNNING|SUCCEEDED|FAILED|SKIPPED_LOCKED, `summary`,
+  `error`, `workerId`), indexed `@@index([jobName, startedAt])`.
 - **ArchiveBatch** — ledger of exported parquet partitions (`key` unique,
   first/last observation id, `rowCount`, `sha256`, `createdAt`). The archive
   itself lives outside Postgres — see docs/ARCHIVE_FORMAT.md.

@@ -5,3 +5,11 @@ export interface ObservationArchive {
   exists(key: string): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
 }
+
+/** An object exists at the destination with bytes that differ from ours. */
+export class ArchiveIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ArchiveIntegrityError";
+  }
+}

@@ -128,11 +128,7 @@ const envSchema = z
       HOST: env.HOST ?? (deployed ? "0.0.0.0" : "127.0.0.1"),
       LOG_LEVEL:
         env.LOG_LEVEL ??
-        (env.NODE_ENV === "test"
-          ? "silent"
-          : env.NODE_ENV === "development"
-            ? "debug"
-            : "info"),
+        (env.NODE_ENV === "test" ? "silent" : env.NODE_ENV === "development" ? "debug" : "info"),
       TRUST_PROXY: parseTrustProxy(env.TRUST_PROXY),
       ALLOWED_EXTENSION_IDS: ids && ids.length > 0 ? ids : undefined,
     };

@@ -32,7 +32,7 @@ Fresh checkout of `origin/main` @ `5e9dd67`, `pnpm install`, Postgres 16 via `do
   `version` (APP_VERSION env or "dev").
 - Rate limits are per endpoint class (defaults: ingest 60/min, read 240/min,
   health 600/min per IP); 429 body `{error:"rate_limited", message,
-  retryAfterSeconds}`.
+retryAfterSeconds}`.
 - CORS: `chrome-extension://` origins restricted to `ALLOWED_EXTENSION_IDS`
   when set; no-Origin and `CORS_ORIGINS` unchanged.
 - Policy doc: docs/API_COMPATIBILITY.md.
@@ -82,6 +82,16 @@ None removed. Deprecation policy defined in docs/API_COMPATIBILITY.md
   `https://api.<domain>` at build time; recommend failing the build when unset
   in production mode.
 - Optional: send `x-request-id` for correlating client/server logs.
+
+## M2 additions
+
+- Archive backend selectable via `ARCHIVE_BACKEND` (`local`|`s3`);
+  `S3CompatibleArchive` with `IfNoneMatch` + sha256 integrity (R2/S3/MinIO).
+- `jobs archive` gains `--dry-run`; `jobs rollup`/`jobs archive` run under a
+  `JobCheckpoint` lease + `JobRun` ledger (migration `job_leases_and_runs`,
+  additive: `lockedBy`/`lockedUntil` + new `JobRun`/`JobRunStatus`).
+- Exporter hardening: object-present/no-ledger replays compare sha256
+  (equal → backfill ledger; different → `ArchiveIntegrityError`).
 
 ## compatibility risks
 

@@ -99,12 +99,14 @@ async function getCursor(tx: RollupTx, jobName: string): Promise<bigint> {
  */
 export async function runDailyRollupJob(
   prisma: PrismaClient,
-  opts: { batchSize?: number } = {},
+  opts: { batchSize?: number; signal?: AbortSignal; heartbeat?: () => Promise<void> } = {},
 ): Promise<{ rolledDays: number; scannedObservations: number; scannedEvents: number }> {
   const batchSize = opts.batchSize ?? 5000;
   const totals = { rolledDays: 0, scannedObservations: 0, scannedEvents: 0 };
 
   for (;;) {
+    if (opts.signal?.aborted) break;
+    await opts.heartbeat?.();
     const progress = await prisma.$transaction(async (tx) => {
       const obsCursor = await getCursor(tx, OBS_CURSOR);
       const evCursor = await getCursor(tx, EVENT_CURSOR);

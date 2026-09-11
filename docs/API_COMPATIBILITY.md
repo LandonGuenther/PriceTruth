@@ -23,12 +23,12 @@
 
 ## Client/server version matrix
 
-| Client → Server | Behaviour |
-|---|---|
-| schemaVersion 1 → v1 server | works |
-| Unknown `schemaVersion` (e.g. 2) → v1 server | 400 `unsupported_schema_version` |
-| Older client → newer v1 server | works (additive fields ignorable) |
-| Newer client → older v1 server | works; new optional request fields ignored; response may lack newer fields |
+| Client → Server                              | Behaviour                                                                  |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| schemaVersion 1 → v1 server                  | works                                                                      |
+| Unknown `schemaVersion` (e.g. 2) → v1 server | 400 `unsupported_schema_version`                                           |
+| Older client → newer v1 server               | works (additive fields ignorable)                                          |
+| Newer client → older v1 server               | works; new optional request fields ignored; response may lack newer fields |
 
 ## Request-id
 

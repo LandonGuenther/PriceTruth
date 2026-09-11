@@ -3,7 +3,7 @@ import type { WriteStream } from "node:fs";
 import type { PrismaClient } from "@prisma/client";
 // @dsnp/parquetjs is CJS; default-import under our ESM/NodeNext setup.
 import parquetjs from "@dsnp/parquetjs";
-import type { ObservationArchive } from "./types.js";
+import { ArchiveIntegrityError, type ObservationArchive } from "./types.js";
 
 const { ParquetSchema, ParquetWriter } = parquetjs;
 
@@ -117,7 +117,15 @@ export interface ExportResult {
 export async function exportObservationBatches(
   prisma: PrismaClient,
   archive: ObservationArchive,
-  opts: { batchSize?: number; maxBatches?: number; destination?: string } = {},
+  opts: {
+    batchSize?: number;
+    maxBatches?: number;
+    destination?: string;
+    signal?: AbortSignal;
+    heartbeat?: () => Promise<void>;
+    /** Compute keys/sha/counts without writing objects, ledger, or checkpoint. */
+    dryRun?: boolean;
+  } = {},
 ): Promise<ExportResult> {
   const batchSize = opts.batchSize ?? 50_000;
   const destination = opts.destination ?? "local";
@@ -127,6 +135,8 @@ export async function exportObservationBatches(
   let cursor = checkpoint ? BigInt(checkpoint.cursor) : 0n;
 
   for (;;) {
+    if (opts.signal?.aborted) break;
+    await opts.heartbeat?.();
     if (opts.maxBatches !== undefined && result.batches >= opts.maxBatches) break;
     const rows = await prisma.priceObservation.findMany({
       where: { id: { gt: cursor } },
@@ -190,40 +200,54 @@ export async function exportObservationBatches(
         continue;
       }
 
-      const manifest: BatchManifest = {
-        schemaVersion: ARCHIVE_SCHEMA_VERSION,
-        rowCount: group.length,
-        firstObservationId: firstId.toString(),
-        lastObservationId: lastId.toString(),
-        minReceivedAt: group[0]!.receivedAt.toISOString(),
-        maxReceivedAt: group[group.length - 1]!.receivedAt.toISOString(),
-        createdAt: new Date().toISOString(),
-        softwareVersion: SOFTWARE_VERSION,
-        sha256,
-        destination,
-      };
-      await archive.putObject(key, bytes);
-      await archive.putObject(manifestKey, Buffer.from(JSON.stringify(manifest, null, 2)));
-      await prisma.archiveBatch.create({
-        data: {
-          key,
-          firstObservationId: firstId,
-          lastObservationId: lastId,
-          rowCount: group.length,
-          sha256,
-        },
-      });
+      if (!opts.dryRun) {
+        // Crash-recovery: object may exist without a ledger row — verify its
+        // bytes before writing; identical ⇒ just backfill the ledger row.
+        const remote = (await archive.exists(key)) ? await archive.getObject(key) : null;
+        if (remote !== null && createHash("sha256").update(remote).digest("hex") !== sha256) {
+          throw new ArchiveIntegrityError(
+            `archive batch ${key} exists with different sha256 — refusing to overwrite`,
+          );
+        }
+        if (remote === null) {
+          const manifest: BatchManifest = {
+            schemaVersion: ARCHIVE_SCHEMA_VERSION,
+            rowCount: group.length,
+            firstObservationId: firstId.toString(),
+            lastObservationId: lastId.toString(),
+            minReceivedAt: group[0]!.receivedAt.toISOString(),
+            maxReceivedAt: group[group.length - 1]!.receivedAt.toISOString(),
+            createdAt: new Date().toISOString(),
+            softwareVersion: SOFTWARE_VERSION,
+            sha256,
+            destination,
+          };
+          await archive.putObject(key, bytes);
+          await archive.putObject(manifestKey, Buffer.from(JSON.stringify(manifest, null, 2)));
+        }
+        await prisma.archiveBatch.create({
+          data: {
+            key,
+            firstObservationId: firstId,
+            lastObservationId: lastId,
+            rowCount: group.length,
+            sha256,
+          },
+        });
+      }
       result.batches++;
       result.writtenKeys.push(key);
     }
 
     result.rows += flat.length;
     cursor = flat[flat.length - 1]!.id;
-    await prisma.jobCheckpoint.upsert({
-      where: { jobName: CHECKPOINT },
-      create: { jobName: CHECKPOINT, cursor: cursor.toString() },
-      update: { cursor: cursor.toString() },
-    });
+    if (!opts.dryRun) {
+      await prisma.jobCheckpoint.upsert({
+        where: { jobName: CHECKPOINT },
+        create: { jobName: CHECKPOINT, cursor: cursor.toString() },
+        update: { cursor: cursor.toString() },
+      });
+    }
     if (rows.length < batchSize) break;
   }
   return result;

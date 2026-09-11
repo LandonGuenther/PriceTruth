@@ -162,17 +162,24 @@ describe("config", () => {
   it("TRUST_PROXY accepts true/false/hops/CIDR list", () => {
     expect(loadConfig({ ...base, TRUST_PROXY: "true" }).TRUST_PROXY).toBe(true);
     expect(loadConfig({ ...base, TRUST_PROXY: "2" }).TRUST_PROXY).toBe(2);
-    expect(loadConfig({ ...base, TRUST_PROXY: "10.0.0.0/8, 192.168.1.1" }).TRUST_PROXY).toEqual(
-      ["10.0.0.0/8", "192.168.1.1"],
-    );
+    expect(loadConfig({ ...base, TRUST_PROXY: "10.0.0.0/8, 192.168.1.1" }).TRUST_PROXY).toEqual([
+      "10.0.0.0/8",
+      "192.168.1.1",
+    ]);
   });
 
   it("production rejects localhost DATABASE_URL (names only in error)", () => {
     expect(() =>
-      loadConfig({ DATABASE_URL: "postgresql://u:secret@localhost:5432/x", NODE_ENV: "production" }),
+      loadConfig({
+        DATABASE_URL: "postgresql://u:secret@localhost:5432/x",
+        NODE_ENV: "production",
+      }),
     ).toThrowError(/DATABASE_URL/);
     try {
-      loadConfig({ DATABASE_URL: "postgresql://u:secret@localhost:5432/x", NODE_ENV: "production" });
+      loadConfig({
+        DATABASE_URL: "postgresql://u:secret@localhost:5432/x",
+        NODE_ENV: "production",
+      });
     } catch (e) {
       expect(String(e)).not.toContain("secret");
     }

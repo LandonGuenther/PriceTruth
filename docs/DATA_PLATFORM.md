@@ -43,6 +43,20 @@ store is a FUTURE option (`docs/adr/ADR-future-clickhouse.md`).
 
 CLI: `pnpm --filter @pricetruth/api jobs rollup [--batch-size 5000]`.
 
+## Job safety (leases + run ledger)
+
+All batch jobs run under `runJob` (`apps/api/src/jobs/runner.ts`), which takes
+an atomic lease on the `JobCheckpoint` row named for the job
+(`lockedBy`/`lockedUntil`, default TTL 10 min) and appends a `JobRun` ledger
+row (`RUNNING` → `SUCCEEDED`|`FAILED`, or `SKIPPED_LOCKED` when another worker
+holds the lease). The `heartbeat()` callback renews the lease between batches
+and SIGTERM/SIGINT abort via `ctx.signal`; checkpoints persist per batch so a
+stopped job resumes where it left off. Only one worker runs a given job at a
+time.
+
+Archive export details (S3 backend, integrity rules, `--dry-run`) are in
+docs/ARCHIVE_FORMAT.md.
+
 ## IMPLEMENTED vs PLANNED
 
 IMPLEMENTED: repository boundary; on-demand `getDailyHistory` (raw rows →

@@ -50,29 +50,46 @@ All `PriceObservation` columns plus `retailerId` (joined from Listing) and
 - `priceCents`, `referencePriceCents`, `clientSkewSeconds`, `schemaVersion` —
   INT32; `inStock`, `synthetic` — BOOLEAN
 
-## Idempotency
+## Idempotency and integrity
 
 Export progress is `JobCheckpoint "archive:observations"` (last exported id).
 Every written batch is recorded in `ArchiveBatch` (`key` unique, first/last id,
-rowCount, sha256). Re-exporting a key whose stored sha256 matches the freshly
-computed bytes is skipped; a mismatched sha256 throws — existing objects are
-never overwritten.
+rowCount, sha256). Write order per batch: `.parquet` object → `.manifest.json`
+→ `ArchiveBatch` ledger row → checkpoint. Re-exporting a key whose stored
+sha256 matches the freshly computed bytes is skipped.
+
+Crash-recovery rules (object store and ledger may diverge mid-batch):
+
+- Ledger row present, sha256 equal → skip.
+- Ledger row present, sha256 different → throw (never overwrite).
+- No ledger row, object present, bytes equal → backfill the ledger row and
+  continue.
+- No ledger row, object present, bytes different → `ArchiveIntegrityError`.
+
+Parquet bytes are deterministic for a fixed row set (covered by a test).
+
+## Destinations
+
+`ARCHIVE_BACKEND=local` (default) → `LocalFilesystemArchive` rooted at
+`ARCHIVE_LOCAL_DIR` (or `--dir`). `ARCHIVE_BACKEND=s3` →
+`S3CompatibleArchive` (`src/archive/s3.ts`) for S3 / Cloudflare R2 / MinIO;
+requires `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+`S3_SECRET_ACCESS_KEY` (plus `S3_REGION` default `auto`, `S3_FORCE_PATH_STYLE`,
+`S3_REQUEST_TIMEOUT_MS`).
+
+S3 writes carry `IfNoneMatch: "*"` + `ChecksumSHA256`; a `412` is resolved by
+re-reading and comparing bytes (equal → idempotent success, different →
+`ArchiveIntegrityError`). Retries are SDK-level (maxAttempts 4, adaptive).
+Objects are batch-sized (≤50k rows), far under the 5 GiB single-PUT limit.
 
 ## CLI
 
 ```sh
-pnpm --filter @pricetruth/api jobs archive --dir /path/to/archive [--max-batches N]
+pnpm --filter @pricetruth/api jobs archive [--dir /path] [--max-batches N] [--dry-run]
 ```
 
-`--dir` defaults to `ARCHIVE_LOCAL_DIR` (default `./archive`).
-
-## Destinations
-
-IMPLEMENTED: `LocalFilesystemArchive` (any directory; used by the CLI).
-PLANNED: `S3CompatibleArchive` against the same `ObservationArchive`
-interface — env vars `ARCHIVE_S3_ENDPOINT`, `ARCHIVE_S3_BUCKET`,
-`ARCHIVE_S3_ACCESS_KEY_ID`, `ARCHIVE_S3_SECRET_ACCESS_KEY`, `ARCHIVE_S3_REGION`
-(names reserved; not implemented).
+`--dir` applies to the local backend only. `--dry-run` computes keys/sha/counts
+without writing objects, ledger rows, or the checkpoint.
 
 ## Restore / verification procedure
 
@@ -84,4 +101,5 @@ interface — env vars `ARCHIVE_S3_ENDPOINT`, `ARCHIVE_S3_BUCKET`,
    `manifest.rowCount`.
 4. Field-level round-trip is covered by the restore test in
    `apps/api/test/api.test.ts` (export → sha256 → read-back → field equality →
-   rerun writes nothing).
+   rerun writes nothing); crash-recovery semantics are covered by
+   `apps/api/test/jobs.test.ts`.

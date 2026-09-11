@@ -20,10 +20,10 @@ Rate limits are per-IP (`request.ip`, honouring `TRUST_PROXY`), per endpoint
 class, per minute, and return `429 { "error": "rate_limited", "message",
 "retryAfterSeconds" }`:
 
-| Class | Endpoints | Default limit |
-|---|---|---|
-| ingest | `POST /v1/observations` | 60 (`RATE_LIMIT_INGEST_PER_MINUTE`) |
-| read | `GET /v1/listings/*/analysis|history` | 240 (`RATE_LIMIT_READ_PER_MINUTE`) |
+| Class  | Endpoints                       | Default limit                        |
+| ------ | ------------------------------- | ------------------------------------ |
+| ingest | `POST /v1/observations`         | 60 (`RATE_LIMIT_INGEST_PER_MINUTE`)  |
+| read   | `GET /v1/listings/*/analysis    | history`                             | 240 (`RATE_LIMIT_READ_PER_MINUTE`) |
 | health | `GET /health`, `GET /readiness` | 600 (`RATE_LIMIT_HEALTH_PER_MINUTE`) |
 
 CORS: requests without an `Origin` header are always allowed.

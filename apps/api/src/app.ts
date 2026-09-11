@@ -99,9 +99,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
       };
       err.statusCode = 429;
       err.code = "rate_limited";
-      (err as unknown as Record<string, unknown>).retryAfterSeconds = Math.ceil(
-        context.ttl / 1000,
-      );
+      (err as unknown as Record<string, unknown>).retryAfterSeconds = Math.ceil(context.ttl / 1000);
       return err;
     },
   });

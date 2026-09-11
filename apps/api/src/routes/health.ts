@@ -36,12 +36,10 @@ export function healthRoutes(app: FastifyInstance): void {
       migrationsCheck(app.prisma, expectedLatestMigration()),
     ]);
     const ready = database === "ok" && migrations === "ok";
-    return reply
-      .status(ready ? 200 : 503)
-      .send({
-        status: ready ? "ready" : "not_ready",
-        checks: { database, migrations },
-        apiVersion: API_VERSION,
-      });
+    return reply.status(ready ? 200 : 503).send({
+      status: ready ? "ready" : "not_ready",
+      checks: { database, migrations },
+      apiVersion: API_VERSION,
+    });
   });
 }
