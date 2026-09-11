@@ -14,7 +14,7 @@
 
 ## New Cursor head SHA
 
-`5826f44f1ff94a9ddd6e720d045f98113405670f` (branch tip before this handoff commit; tip advances with this doc)
+`5826f44f1ff94a9ddd6e720d045f98113405670f` (branch tip)
 
 ## Branch
 
