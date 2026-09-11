@@ -62,7 +62,7 @@ describe("extract", () => {
       schemaVersion: 1,
       priceType: "STANDARD",
       referenceType: "UNKNOWN",
-      extractorVersion: "1.0.0",
+      extractorVersion: "1.1.0",
     });
     expect(r.observation.variant).toEqual({ Size: "Large" });
   });
@@ -110,6 +110,23 @@ describe("extract", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.observation.priceCents).toBe(19995);
+  });
+
+  it("hidden price page ignores cross-sell carousel prices → no_price", () => {
+    const doc = loadFixture("hidden-price-cross-sell.html");
+    const r = amazonAdapter.extract(doc, productUrl("B09B8V1LZ3"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("price hidden until add-to-cart");
+  });
+
+  it("buy-box price wins over cross-sell .a-offscreen", () => {
+    const doc = loadFixture("cross-sell-with-buybox.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0DEMOASIN"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(29900);
   });
 
   it("extractExternalId falls back to DOM when URL has no id", () => {

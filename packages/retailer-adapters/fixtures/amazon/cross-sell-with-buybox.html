@@ -1,0 +1,30 @@
+<!--
+  Trimmed hand-built fixture: a normal buy-box .a-offscreen price plus a
+  cross-sell carousel carrying a different ASIN's $12.34 price. Proves the
+  primary path ignores foreign-ASIN price elements. NOT a captured page.
+-->
+<!doctype html>
+<html>
+  <body>
+    <div id="dp" data-asin="B0DEMOASIN">
+      <span id="productTitle">Acme Widget</span>
+      <div id="corePrice_feature_div">
+        <span class="a-price">
+          <span class="a-offscreen">$299.00</span>
+          <span class="a-price-whole">299<span class="a-price-decimal">.</span></span>
+          <span class="a-price-fraction">00</span>
+        </span>
+      </div>
+      <div id="availability">In Stock</div>
+      <div id="sims-consolidated-1_feature_div">
+        <ul>
+          <li data-asin="B0GGTRSMKP">
+            <a class="a-link-normal" href="/dp/B0GGTRSMKP">
+              <span class="a-price"><span class="a-offscreen">$12.34</span></span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>
