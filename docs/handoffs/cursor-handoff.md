@@ -14,7 +14,7 @@
 
 ## New Cursor head SHA
 
-`4a4c43f148004e79fba27cfdfa2dffbb91f4d83d`
+`a7a1cda84698ddfb3a43bfe220cd1739081ac150` (and any later docs-only commits on this branch)
 
 ## Branch
 
