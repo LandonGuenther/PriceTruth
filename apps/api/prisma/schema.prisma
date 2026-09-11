@@ -34,6 +34,25 @@ enum IdentifierType {
   MPN
   ASIN
   BESTBUY_SKU
+  MANUFACTURER_MODEL
+}
+
+enum AssertionStatus {
+  ACTIVE
+  RETRACTED
+}
+
+enum MatchLevel {
+  EXACT
+  HIGH
+  REVIEW
+  UNRESOLVED
+  CONFLICT
+}
+
+enum ProductLinkAction {
+  LINK
+  UNLINK
 }
 
 enum SourceType {
@@ -92,9 +111,19 @@ model Product {
   title       String
   brand       String?
   modelNumber String?
+  familyId    String?             @db.Uuid
+  family      ProductFamily?      @relation(fields: [familyId], references: [id])
   createdAt   DateTime            @default(now())
   identifiers ProductIdentifier[]
   listings    Listing[]
+}
+
+model ProductFamily {
+  id        String    @id @default(uuid()) @db.Uuid
+  title     String
+  brand     String?
+  createdAt DateTime  @default(now())
+  products  Product[]
 }
 
 model ProductIdentifier {
@@ -120,6 +149,7 @@ model DataSource {
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
   observations               PriceObservation[]
+  assertions                 IdentifierAssertion[]
 }
 
 model Listing {
@@ -138,6 +168,9 @@ model Listing {
   updatedAt    DateTime          @updatedAt
   observations PriceObservation[]
   variants     ListingVariant[]
+  assertions   IdentifierAssertion[]
+  matchEvidence MatchEvidence[]
+  linkEvents    ProductLinkEvent[]
 
   @@unique([retailerId, externalId])
 }
@@ -193,4 +226,54 @@ model ObservationStatusEvent {
   createdAt     DateTime          @default(now())
 
   @@index([observationId])
+}
+
+/**
+ * An identifier asserted about a Listing by a data source, in normalized form.
+ * `normalizedValue` follows @pricetruth/catalog normalization (GTIN-family →
+ * 14-digit GTIN; ASIN → uppercase; models → upper/collapsed whitespace).
+ */
+model IdentifierAssertion {
+  id              BigInt          @id @default(autoincrement())
+  listingId       String          @db.Uuid
+  listing         Listing         @relation(fields: [listingId], references: [id])
+  type            IdentifierType
+  rawValue        String          @db.VarChar(200)
+  normalizedValue String          @db.VarChar(200)
+  valid           Boolean
+  dataSourceId    String          @db.Uuid
+  dataSource      DataSource      @relation(fields: [dataSourceId], references: [id])
+  status          AssertionStatus @default(ACTIVE)
+  firstSeenAt     DateTime        @default(now())
+  lastSeenAt      DateTime        @default(now())
+
+  @@unique([listingId, type, normalizedValue])
+  @@index([type, normalizedValue])
+}
+
+model MatchEvidence {
+  id                 BigInt     @id @default(autoincrement())
+  listingId          String     @db.Uuid
+  listing            Listing    @relation(fields: [listingId], references: [id])
+  candidateProductId String?    @db.Uuid
+  level              MatchLevel
+  reasons            String[]
+  engineVersion      String     @db.VarChar(32)
+  evaluatedAt        DateTime   @default(now())
+
+  @@index([listingId, evaluatedAt])
+}
+
+model ProductLinkEvent {
+  id                BigInt            @id @default(autoincrement())
+  listingId         String            @db.Uuid
+  listing           Listing           @relation(fields: [listingId], references: [id])
+  action            ProductLinkAction
+  previousProductId String?           @db.Uuid
+  newProductId      String?           @db.Uuid
+  reason            String
+  actor             String            @db.VarChar(120)
+  createdAt         DateTime          @default(now())
+
+  @@index([listingId, createdAt])
 }

@@ -31,7 +31,7 @@ export async function makeApp(
 
 export async function truncateAll(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE "ObservationStatusEvent", "PriceObservation", "ListingVariant", "Listing", "ProductIdentifier", "Product", "Retailer" CASCADE',
+    'TRUNCATE "ObservationStatusEvent", "PriceObservation", "ListingVariant", "ProductLinkEvent", "MatchEvidence", "IdentifierAssertion", "Listing", "ProductIdentifier", "Product", "ProductFamily", "Retailer" CASCADE',
   );
 }
 

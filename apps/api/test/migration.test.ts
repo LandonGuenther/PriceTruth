@@ -50,6 +50,8 @@ describeIfDb("migration paths", () => {
     expect(applied.map((m) => m.migration_name)).toEqual([
       "20260911022422_init",
       "20260911041711_data_foundation",
+      "20260911064203_catalog_identity",
+      "20260911064204_catalog_identity_model_backfill",
     ]);
 
     // Drift check: nothing needed to reach the datamodel except objects Prisma
@@ -93,8 +95,8 @@ describeIfDb("migration paths", () => {
       api: "bestbuy:products-api",
     };
     const listings: Array<[string, string, string]> = [
-      ["11111111-1111-1111-1111-111111111111", "amazon", "B0AAAAAA0001"],
-      ["22222222-2222-2222-2222-222222222222", "amazon", "B0BBBBBB0002"],
+      ["11111111-1111-1111-1111-111111111111", "amazon", "B0AAAAAA01"],
+      ["22222222-2222-2222-2222-222222222222", "amazon", "B0BBBBBB02"],
       ["33333333-3333-3333-3333-333333333333", "bestbuy", "10129617"],
     ];
     for (const [id, retailerId, externalId] of listings) {
@@ -214,6 +216,18 @@ describeIfDb("migration paths", () => {
     expect(body.referencePriceCents).toBe(27499);
     const bbCount = obs.filter((o) => o.l === listings[2]![0]).length;
     expect(body.stats.observationCount).toBe(bbCount);
+
+    // catalog_identity backfill: one IdentifierAssertion per listing
+    // (externalId → ASIN/BESTBUY_SKU, normalized uppercase, extension source)
+    const assertions = await scratch.$queryRawUnsafe<
+      { listingId: string; type: string; normalizedValue: string; valid: boolean }[]
+    >(`SELECT "listingId"::text AS "listingId", "type"::text AS "type",
+              "normalizedValue", "valid"
+       FROM "IdentifierAssertion" ORDER BY "listingId"`);
+    expect(assertions).toHaveLength(3);
+    const types = new Set(assertions.map((a) => a.type));
+    expect(types).toEqual(new Set(["ASIN", "BESTBUY_SKU"]));
+    expect(assertions.every((a) => a.valid)).toBe(true);
     console.log("PATH_B_ANALYSIS", JSON.stringify(body, null, 2));
     await app.close();
   }, 60_000);

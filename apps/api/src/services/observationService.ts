@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  Prisma,
   type ObservationStatus,
   type PrismaClient,
   type PriceType as PrismaPriceType,
@@ -15,14 +14,15 @@ import {
 } from "@pricetruth/shared";
 import type { AppConfig } from "../config.js";
 import { fetchBestBuyProduct, type FetchLike } from "./bestbuyApi.js";
+import {
+  identifyNewListing,
+  listingAssertionInputs,
+  reevaluateListing,
+  upsertAssertions,
+} from "./catalogService.js";
 import { resolveObservationTime } from "./timePolicy.js";
 
 const DEDUP_WINDOW_MS = 60 * 60 * 1000;
-
-const IDENTIFIER_TYPE: Record<string, "ASIN" | "BESTBUY_SKU"> = {
-  amazon: "ASIN",
-  bestbuy: "BESTBUY_SKU",
-};
 
 // Type-level proof that the shared literals and the Prisma enums are identical.
 const priceTypeMap = {
@@ -63,6 +63,7 @@ export interface IngestResult {
 async function upsertListing(
   prisma: PrismaClient,
   obs: RetailerObservation,
+  dataSourceId: string,
 ): Promise<{ id: string }> {
   const retailerId = obs.retailer;
   await prisma.retailer.upsert({
@@ -74,11 +75,13 @@ async function upsertListing(
   const key = { retailerId, externalId: obs.externalId };
   const existing = await prisma.listing.findUnique({
     where: { retailerId_externalId: key },
-    select: { id: true },
+    select: { id: true, title: true, brand: true },
   });
+  const assertionItems = listingAssertionInputs(obs);
+
   if (existing) {
     // Listing metadata may be refreshed to the newest observed values.
-    await prisma.listing.update({
+    const updated = await prisma.listing.update({
       where: { id: existing.id },
       data: {
         url: obs.url,
@@ -87,31 +90,23 @@ async function upsertListing(
         modelNumber: obs.modelNumber ?? null,
         gtin: obs.gtin ?? null,
       },
+      select: { id: true, title: true, brand: true },
     });
-    return existing;
-  }
-
-  // MVP: create a Product 1:1 per new Listing (no cross-retailer merging yet).
-  const product = await prisma.product.create({
-    data: { title: obs.title, brand: obs.brand ?? null, modelNumber: obs.modelNumber ?? null },
-  });
-
-  const identifiers: Prisma.ProductIdentifierCreateManyInput[] = [
-    { productId: product.id, type: IDENTIFIER_TYPE[retailerId] ?? "MPN", value: obs.externalId },
-  ];
-  if (obs.gtin) {
-    // A GTIN may already belong to another product — on conflict, skip linking.
-    const conflict = await prisma.productIdentifier.findUnique({
-      where: { type_value: { type: "GTIN", value: obs.gtin } },
-      select: { id: true },
-    });
-    if (!conflict) {
-      identifiers.push({ productId: product.id, type: "GTIN", value: obs.gtin });
+    const { identifiers, addedNew } = await upsertAssertions(
+      prisma,
+      existing.id,
+      assertionItems,
+      dataSourceId,
+    );
+    // New identifier evidence re-runs the match for the audit log, but an
+    // already-linked listing is never auto-relinked.
+    if (addedNew) {
+      await reevaluateListing(prisma, updated, identifiers);
     }
+    return { id: existing.id };
   }
-  await prisma.productIdentifier.createMany({ data: identifiers });
 
-  return prisma.listing.create({
+  const listing = await prisma.listing.create({
     data: {
       retailerId,
       externalId: obs.externalId,
@@ -120,10 +115,14 @@ async function upsertListing(
       brand: obs.brand ?? null,
       modelNumber: obs.modelNumber ?? null,
       gtin: obs.gtin ?? null,
-      productId: product.id,
     },
-    select: { id: true },
+    select: { id: true, title: true, brand: true, modelNumber: true },
   });
+
+  // Assertions first, then the match engine decides the product link.
+  const { identifiers } = await upsertAssertions(prisma, listing.id, assertionItems, dataSourceId);
+  await identifyNewListing(prisma, listing, identifiers);
+  return { id: listing.id };
 }
 
 /** Canonical JSON fingerprint: sha256 of entries sorted by key. */
@@ -247,7 +246,7 @@ export async function ingestObservation(
   if (resolved.rejectReason) throw new ObservationRejected(resolved.rejectReason);
   const { effectiveAt, clientSkewSeconds } = resolved;
 
-  const listing = await upsertListing(prisma, obs);
+  const listing = await upsertListing(prisma, obs, dataSource.id);
 
   const variantId =
     obs.variant && Object.keys(obs.variant).length > 0

@@ -32,6 +32,7 @@ pnpm test
 | ---------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `packages/shared`            | `@pricetruth/shared`            | Branding, retailer registry, observation schema, money helpers, shared analysis response types |
 | `packages/scoring`           | `@pricetruth/scoring`           | Pure, deterministic scoring per `docs/SCORING.md`; no I/O, no retailer-specific logic          |
+| `packages/catalog`           | `@pricetruth/catalog`           | Pure identifier normalization + match engine per `docs/CATALOG_IDENTITY.md`                    |
 | `packages/retailer-adapters` | `@pricetruth/retailer-adapters` | Pure DOM extraction of `RetailerObservation`s for Amazon/Best Buy product pages                |
 | `apps/api`                   | `@pricetruth/api`               | Fastify 5 + Prisma 6 + Postgres: observation ingest, analysis, history                         |
 | `apps/extension`             | `@pricetruth/extension`         | Chrome MV3 side-panel extension (React + Vite)                                                 |
@@ -49,11 +50,12 @@ tables; "current price" is always derived from the newest eligible observation.
 
 - [docs/API.md](docs/API.md) · [docs/DATA_MODEL.md](docs/DATA_MODEL.md) ·
   [docs/SCORING.md](docs/SCORING.md) · [docs/EXTENSION.md](docs/EXTENSION.md) ·
-  [docs/PRIVACY.md](docs/PRIVACY.md)
+  [docs/PRIVACY.md](docs/PRIVACY.md) · [docs/CATALOG_IDENTITY.md](docs/CATALOG_IDENTITY.md)
 - ADRs: [observation immutability](docs/adr/ADR-001-observation-immutability.md) ·
   [identifiers & types](docs/adr/ADR-002-identifiers-and-database-types.md) ·
   [provenance](docs/adr/ADR-003-provenance.md) ·
-  [client vs server time](docs/adr/ADR-004-client-time-vs-server-time.md)
+  [client vs server time](docs/adr/ADR-004-client-time-vs-server-time.md) ·
+  [catalog identity](docs/adr/ADR-005-catalog-identity.md)
 - Migration notes: [docs/migrations/2026-09-data-foundation.md](docs/migrations/2026-09-data-foundation.md)
 
 ### API quickstart

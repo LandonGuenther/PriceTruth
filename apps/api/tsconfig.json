@@ -3,10 +3,13 @@
   "compilerOptions": {
     "composite": true,
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "test"],
-  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/scoring" }]
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/scoring" },
+    { "path": "../../packages/catalog" }
+  ]
 }

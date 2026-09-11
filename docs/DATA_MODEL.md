@@ -8,13 +8,24 @@ Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
 - **Retailer** — `amazon` | `bestbuy` (id matches `RetailerId` in
   `@pricetruth/shared`). Seeded idempotently by `pnpm --filter @pricetruth/api db:seed`
   and lazily upserted on first observation so a fresh DB works without seeding.
-- **Product** — canonical product (`title`, `brand?`, `modelNumber?`). In the MVP a
-  Product is created **1:1 per Listing** on first observation — no cross-retailer
-  merging yet.
+- **Product** — the canonical variant-level purchasable product (`title`,
+  `brand?`, `modelNumber?`, `familyId?`). The match engine links listings to a
+  shared product on strong identifier evidence (EXACT/HIGH); otherwise a 1:1
+  Product is created. See docs/CATALOG_IDENTITY.md.
+- **ProductFamily** — product line above Product (e.g. "Sony WH-1000XM6").
+  Schema exists; population is PLANNED (families are manual for now).
 - **ProductIdentifier** — `(type, value)` pairs (`GTIN`, `UPC`, `EAN`, `MPN`,
-  `ASIN`, `BESTBUY_SKU`), unique per type+value, recorded so merging can be added
-  later. A GTIN that already belongs to another product is skipped rather than
-  re-linked.
+  `ASIN`, `BESTBUY_SKU`, `MANUFACTURER_MODEL`), unique per type+value. Values
+  are stored normalized: GTIN-family → 14-digit GTIN, ASIN → uppercase, and
+  model types store the match key (separators stripped) so lookups are index
+  hits. Conflicts are skipped rather than re-linked.
+- **IdentifierAssertion** — every identifier a data source has asserted about a
+  listing (raw + normalized, `valid`, `status`, first/last seen). Upserted on
+  each observation.
+- **MatchEvidence** — audit log of `evaluateMatch` runs (level, machine-readable
+  reason codes, `engineVersion`).
+- **ProductLinkEvent** — audit log of `productId` changes (LINK/UNLINK,
+  previous/new product, reason, actor).
 - **Listing** — `(retailerId, externalId)` unique. Descriptive metadata only
   (`url`, `title`, `brand`, `modelNumber`, `gtin`) — refreshed to the newest
   observed values. **No price fields**: there is no mutable `currentPrice` by

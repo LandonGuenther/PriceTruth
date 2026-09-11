@@ -11,6 +11,7 @@ import {
   truncateAll,
 } from "./helpers.js";
 import { setObservationStatus } from "../src/services/observationService.js";
+import { linkListing, unlinkListing } from "../src/services/catalogService.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
 
 describeIfDb("api integration", () => {
@@ -51,7 +52,10 @@ describeIfDb("api integration", () => {
     expect(listing).not.toBeNull();
     expect(listing!.title).toBe("Test Widget");
     const idTypes = listing!.product!.identifiers.map((i) => i.type).sort();
-    expect(idTypes).toEqual(["ASIN", "GTIN"]);
+    expect(idTypes).toEqual(["ASIN", "GTIN", "MANUFACTURER_MODEL"]);
+    // ProductIdentifier stores normalized values (GTIN → 14 digits)
+    const gtinRow = listing!.product!.identifiers.find((i) => i.type === "GTIN");
+    expect(gtinRow!.value).toBe("00012345678905");
 
     const obs = await prisma.priceObservation.findFirst({
       where: { listingId: listing!.id },
@@ -631,6 +635,196 @@ describeIfDb("api integration", () => {
     );
     // status-only update still works
     await prisma.priceObservation.update({ where: { id: obs.id }, data: { status: "EXCLUDED" } });
+    await app.close();
+  });
+
+  // ---- catalog identity (M2) -------------------------------------------------
+
+  const GTIN_A = "0012345678905"; // valid 13-digit, normalizes to 00012345678905
+  const GTIN_B = "036000291452"; // valid UPC-A, normalizes to 00036000291452
+
+  const listingOf = async (retailerId: string, externalId: string) =>
+    prisma.listing.findUniqueOrThrow({
+      where: { retailerId_externalId: { retailerId, externalId } },
+    });
+
+  it("same valid GTIN across retailers → shared Product (EXACT auto-link)", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const l1 = await listingOf("amazon", "B0TESTASIN");
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        retailer: "bestbuy",
+        externalId: "7654321",
+        url: "https://www.bestbuy.com/product/x/J3GWRW4HCC/sku/7654321",
+      }),
+    });
+    const l2 = await listingOf("bestbuy", "7654321");
+    expect(l2.productId).toBe(l1.productId);
+
+    const ev = await prisma.matchEvidence.findMany({ where: { listingId: l2.id } });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.level).toBe("EXACT");
+    expect(ev[0]!.candidateProductId).toBe(l1.productId);
+    expect(ev[0]!.engineVersion).toBe("1.0.0");
+
+    const link = await prisma.productLinkEvent.findFirstOrThrow({
+      where: { listingId: l2.id, action: "LINK" },
+    });
+    expect(link.actor).toBe("auto:match-engine@1.0.0");
+    // the linked product gained the new listing's identifiers
+    const ids = await prisma.productIdentifier.findMany({
+      where: { productId: l1.productId! },
+    });
+    expect(ids.map((i) => i.type).sort()).toContainEqual("BESTBUY_SKU");
+    await app.close();
+  });
+
+  it("no shared identifiers → separate products, UNRESOLVED evidence", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        externalId: "B0OTHERASIN",
+        url: "https://www.amazon.com/dp/B0OTHERASIN",
+        gtin: GTIN_B,
+        modelNumber: "OTHER-9",
+      }),
+    });
+    const l1 = await listingOf("amazon", "B0TESTASIN");
+    const l2 = await listingOf("amazon", "B0OTHERASIN");
+    expect(l2.productId).not.toBe(l1.productId);
+    const ev = await prisma.matchEvidence.findMany({ where: { listingId: l2.id } });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.level).toBe("UNRESOLVED");
+    await app.close();
+  });
+
+  it("GTIN → product A, brand+model → product B → CONFLICT, own product", async () => {
+    const app = await makeApp();
+    // A: amazon listing asserting GTIN_A
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const a = await listingOf("amazon", "B0TESTASIN");
+    // B: bestbuy listing asserting brand+model only
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        retailer: "bestbuy",
+        externalId: "7654321",
+        url: "https://www.bestbuy.com/product/x/J3GWRW4HCC/sku/7654321",
+        gtin: undefined,
+        brand: "Sony",
+        modelNumber: "WH-1000XM6",
+        title: "Sony Headphones",
+      }),
+    });
+    const b = await listingOf("bestbuy", "7654321");
+    expect(b.productId).not.toBe(a.productId);
+    // C: asserts both GTIN_A and Sony/WH-1000XM6 → conflict
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        externalId: "B0CONFLICT0",
+        url: "https://www.amazon.com/dp/B0CONFLICT0",
+        brand: "Sony",
+        modelNumber: "WH-1000XM6",
+        title: "Sony Headphones",
+      }),
+    });
+    const c = await listingOf("amazon", "B0CONFLICT0");
+    expect(c.productId).not.toBe(a.productId);
+    expect(c.productId).not.toBe(b.productId);
+    const ev = await prisma.matchEvidence.findMany({ where: { listingId: c.id } });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.level).toBe("CONFLICT");
+    expect(ev[0]!.candidateProductId).toBeNull();
+    await app.close();
+  });
+
+  it("linkListing/unlinkListing write ProductLinkEvent rows", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const listing = await listingOf("amazon", "B0TESTASIN");
+    const original = listing.productId;
+
+    const target = await prisma.product.create({
+      data: { title: "Canonical", brand: "Acme" },
+    });
+    await linkListing(prisma, {
+      listingId: listing.id,
+      productId: target.id,
+      reason: "same product",
+      actor: "cli:tester",
+    });
+    expect((await listingOf("amazon", "B0TESTASIN")).productId).toBe(target.id);
+
+    await unlinkListing(prisma, {
+      listingId: listing.id,
+      reason: "wrong product",
+      actor: "cli:tester",
+    });
+    const after = await listingOf("amazon", "B0TESTASIN");
+    expect(after.productId).not.toBe(target.id);
+    expect(after.productId).not.toBe(original);
+
+    const events = await prisma.productLinkEvent.findMany({
+      where: { listingId: listing.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(events.map((e) => e.action)).toEqual(["LINK", "UNLINK"]);
+    expect(events[0]!.previousProductId).toBe(original);
+    expect(events[0]!.newProductId).toBe(target.id);
+    expect(events[1]!.previousProductId).toBe(target.id);
+    expect(events[1]!.newProductId).toBe(after.productId);
+    expect(events.every((e) => e.actor === "cli:tester")).toBe(true);
+    await app.close();
+  });
+
+  it("new assertion on an existing listing records evidence but never relinks", async () => {
+    const app = await makeApp();
+    // no GTIN on the first sighting so the original product isn't a candidate
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ gtin: undefined }),
+    });
+    const listing = await listingOf("amazon", "B0TESTASIN");
+    const originalProduct = listing.productId;
+
+    // another product holding GTIN_B
+    const other = await prisma.product.create({
+      data: { title: "Other", identifiers: { create: { type: "GTIN", value: "00036000291452" } } },
+    });
+
+    // second sighting asserts a new GTIN (different value → new assertion)
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      // different brand keeps the persisted AC-1 assertion a weak model_only
+      // match against the original product (otherwise it would CONFLICT)
+      payload: amazonObservation({
+        priceCents: 28800,
+        gtin: GTIN_B,
+        modelNumber: "X-2",
+        brand: "Sony",
+      }),
+    });
+    const after = await listingOf("amazon", "B0TESTASIN");
+    expect(after.productId).toBe(originalProduct); // never auto-relinked
+    const ev = await prisma.matchEvidence.findMany({
+      where: { listingId: listing.id },
+      orderBy: { evaluatedAt: "asc" },
+    });
+    expect(ev.length).toBe(2); // creation evidence + re-evaluation
+    expect(ev[1]!.level).toBe("EXACT");
+    expect(ev[1]!.candidateProductId).toBe(other.id);
     await app.close();
   });
 });

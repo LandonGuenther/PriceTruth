@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       "@pricetruth/shared": path.resolve(here, "../../packages/shared/src/index.ts"),
       "@pricetruth/scoring": path.resolve(here, "../../packages/scoring/src/index.ts"),
+      "@pricetruth/catalog": path.resolve(here, "../../packages/catalog/src/index.ts"),
     },
   },
   test: {
