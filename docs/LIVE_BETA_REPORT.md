@@ -113,7 +113,7 @@ awaiting owner GitHub secrets + first real retailer PDP validation in Chrome.
    - `STAGING_API_URL=https://pricetruth-api-staging.fly.dev`
    - `STAGING_INTERNAL_API_TOKEN=<same value as Fly INTERNAL_API_TOKEN>`
    - `FLY_API_TOKEN=<rotated token>`
-3. Load `pricetruth-extension-0.1.0.zip` unpacked in Chrome and visit an Amazon/Best Buy PDP.
+3. Load the rebuilt `pricetruth-extension-0.1.0.zip` unpacked in Chrome (remove any older unpacked copy first), click the blue toolbar square, and visit an Amazon/Best Buy PDP.
 4. Optional: `BESTBUY_API_KEY` for official known-listing refresh.
 
 ## HOW DO I KNOW IT IS DOWN?
