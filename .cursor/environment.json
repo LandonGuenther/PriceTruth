@@ -1,0 +1,14 @@
+{
+  "name": "PriceTruth",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "set -a && source .env && set +a && pnpm --filter @pricetruth/api start",
+      "description": "PriceTruth Fastify API on 127.0.0.1:3000 (health at /health)."
+    }
+  ],
+  "ports": [3000]
+}
