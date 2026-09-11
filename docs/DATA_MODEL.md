@@ -19,29 +19,71 @@ Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
   (`url`, `title`, `brand`, `modelNumber`, `gtin`) — refreshed to the newest
   observed values. **No price fields**: there is no mutable `currentPrice` by
   design; the "current price" is always derived from the newest observation.
-- **PriceObservation** — the immutable event. `priceCents`,
-  `referencePriceCents?` (a reference price is observed together with the price,
-  on the same row — no separate table), `currency`, `inStock?`, `variant?`,
-  `observedAt`, plus provenance fields folded into the same row: `source`,
-  `clientVersion`, `receivedAt`, `userAgentHash` (sha256 of the UA header — the
-  raw UA is never stored), and `synthetic` (test/demo rows, default `false`).
+- **ListingVariant** — a listing attribute tuple (size/color/etc.) deduplicated
+  by `fingerprint` = sha256 of the canonical sorted-keys JSON of `attributes`.
+  `@@unique([listingId, fingerprint])`; observations with identical attribute
+  payloads share a row.
+- **DataSource** — `key` (unique), `type` (`EXTENSION`/`API`/`MANUAL`/`SYNTHETIC`),
+  `trustClass` (`CLIENT_REPORTED`/`SERVER_FETCHED`/`VERIFIED`/`TEST`),
+  `redistributionReviewStatus` (metadata for counsel review; the code makes no
+  legal determination). Seeded by the data-foundation migration and by
+  `DATA_SOURCE_DEFINITIONS` in `@pricetruth/shared`.
+- **PriceObservation** — the append-only fact (`BigInt` autoincrement id;
+  serialised as a decimal string in API responses):
+  - price: `priceCents`, `priceType` (`STANDARD`/`SALE`/`MEMBER`/`SUBSCRIPTION`/
+    `COUPON_REQUIRED`/`INSTALLMENT`/`USED`/`REFURBISHED`/`MARKETPLACE`/`UNKNOWN`;
+    default `UNKNOWN`), `referencePriceCents?`, `referenceType?` (`WAS_PRICE`/
+    `LIST_PRICE`/`MSRP`/`COMP_VALUE`/`REGULAR_PRICE`/`UNKNOWN`; required iff a
+    reference price is present), `currency`, `inStock?`;
+  - identity: `listingId`, `variantId?`, `dataSourceId`;
+  - time: `receivedAt` (server), `clientObservedAt?` (as reported),
+    `effectiveAt` (what dedup/history/scoring use — see ADR-004),
+    `clientSkewSeconds?`;
+  - provenance: `schemaVersion` (≥1), `clientVersion?`, `extractorVersion?`,
+    `synthetic` (default `false`);
+  - lifecycle: `status` (`ACCEPTED`/`QUARANTINED`/`EXCLUDED`) — the only
+    mutable column.
+- **ObservationStatusEvent** — append-only log of `status` transitions
+  (`observationId`, `fromStatus`, `toStatus`, `reason`, `createdAt`).
+
+## Integrity constraints
+
+Beyond Prisma-expressible rules the migration adds CHECKs: `priceCents > 0`,
+`referencePriceCents > 0`, `referencePriceCents IS NULL` ⇔ `referenceType IS
+NULL`, `currency ~ '^[A-Z]{3}$'`, `schemaVersion >= 1`, non-empty
+`Listing.externalId` and `DataSource.key`.
 
 ## Immutability rules
 
-`PriceObservation` rows are append-only: the API exposes no update or delete
-paths for them. Corrections are expressed as new observations.
+`PriceObservation` rows are append-only, enforced in the database by the
+`pricetruth_forbid_observation_mutation()` trigger: DELETE always raises; UPDATE
+raises unless only `status` changed. Status transitions go through
+`setObservationStatus(prisma, id, toStatus, reason)`, which updates the row and
+appends an `ObservationStatusEvent` in one transaction — no route exposes it.
+Corrections are expressed as new observations. See ADR-001.
 
 ## Dedup rule
 
 An incoming observation is rejected as a duplicate (HTTP 200,
 `duplicate: true`) when an existing row for the same listing has identical
-`priceCents`, `referencePriceCents` (null-equal), `currency` and `source`, and an
-`observedAt` within ±60 minutes of the incoming `observedAt`.
+`priceCents`, `referencePriceCents` (null-equal), `currency` and `dataSourceId`,
+and an `effectiveAt` within ±60 minutes of the incoming `effectiveAt`. `status`
+is excluded from dedup — a quarantined identical row is still the same event.
+
+## Eligibility
+
+Analysis and history use only observations with `synthetic = false`,
+`status = 'ACCEPTED'`, and `priceType ∈ {STANDARD, SALE}`
+(`ELIGIBLE_PRICE_TYPES` in `@pricetruth/scoring`). `USED`, `MEMBER`,
+`UNKNOWN`, etc. are stored but never scored.
 
 ## Synthetic data policy
 
-Rows with `synthetic: true` (seeded demo/test data) are excluded from analysis
-and history responses. API-ingested observations are always `synthetic: false`.
+Rows with `synthetic: true` are excluded from analysis and history. Clients
+cannot create them: `POST /v1/observations` rejects any `source` whose
+`DataSource.trustClass` is not `CLIENT_REPORTED` — only server-side paths (the
+Best Buy enrichment writer, seeds, tests) can write `SERVER_FETCHED`/`VERIFIED`/
+`TEST` rows.
 
 ## Best Buy product URLs
 
