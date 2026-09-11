@@ -13,6 +13,13 @@ import {
 import { setObservationStatus } from "../src/services/observationService.js";
 import { corroborateListing } from "../src/services/dataQuality/corroboration.js";
 import { runDailyRollupJob } from "../src/jobs/dailyRollup.js";
+import { exportObservationBatches } from "../src/archive/exporter.js";
+import { LocalFilesystemArchive } from "../src/archive/localFilesystem.js";
+import parquetjs from "@dsnp/parquetjs";
+import { createHash } from "node:crypto";
+import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { collapseToDailySeries } from "@pricetruth/scoring";
 import { linkListing, unlinkListing } from "../src/services/catalogService.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
@@ -1173,5 +1180,115 @@ describeIfDb("api integration", () => {
     });
     expect(after.eligibleObservationCount).toBe(3);
     expect(after.medianCents).toBe(20000); // median(500,20000,21000) = 20000
+  });
+
+  // ---- archive export (M5) ---------------------------------------------------
+
+  it("archive export → manifest sha256, parquet read-back equality, idempotent rerun", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pt-archive-"));
+    const archive = new LocalFilesystemArchive(dir);
+
+    await prisma.retailer.upsert({
+      where: { id: "amazon" },
+      update: {},
+      create: { id: "amazon", displayName: "Amazon" },
+    });
+    const listing = await prisma.listing.create({
+      data: {
+        retailerId: "amazon",
+        externalId: "B0ARCHIVE1",
+        url: "https://www.amazon.com/dp/B0ARCHIVE1",
+        title: "Archive Widget",
+      },
+    });
+    const dsId = await dataSourceId(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+    const N = 5;
+    const stored: bigint[] = [];
+    for (let i = 0; i < N; i++) {
+      const row = await prisma.priceObservation.create({
+        data: {
+          listingId: listing.id,
+          dataSourceId: dsId,
+          priceCents: 1000 + i * 100,
+          priceType: "STANDARD",
+          currency: "USD",
+          effectiveAt: new Date(Date.parse("2026-09-09T12:00:00Z") + i * 3600_000),
+          receivedAt: new Date(Date.parse("2026-09-09T12:00:00Z") + i * 3600_000),
+          status: i === 4 ? "QUARANTINED" : "ACCEPTED",
+          schemaVersion: 1,
+          synthetic: true,
+        },
+      });
+      stored.push(row.id);
+    }
+
+    const r1 = await exportObservationBatches(prisma, archive, { destination: dir });
+    expect(r1.batches).toBe(1);
+    expect(r1.rows).toBe(N);
+    const key = r1.writtenKeys[0]!;
+    expect(key).toMatch(
+      /^schema=v1\/retailer=amazon\/year=2026\/month=09\/day=09\/part-\d+-\d+\.parquet$/,
+    );
+
+    // manifest checks + sha256 of the file
+    const manifest = JSON.parse(
+      Buffer.from(await archive.getObject(key.replace(/\.parquet$/, ".manifest.json"))).toString(),
+    );
+    const bytes = await archive.getObject(key);
+    const fileHash = createHash("sha256").update(bytes).digest("hex");
+    expect(manifest.sha256).toBe(fileHash);
+    expect(manifest.rowCount).toBe(N);
+    expect(manifest.schemaVersion).toBe(1);
+    expect(manifest.firstObservationId).toBe(stored[0]!.toString());
+    expect(manifest.lastObservationId).toBe(stored[N - 1]!.toString());
+
+    // ledger row
+    const ledger = await prisma.archiveBatch.findUniqueOrThrow({ where: { key } });
+    expect(ledger.sha256).toBe(fileHash);
+    expect(ledger.rowCount).toBe(N);
+
+    // parquet read-back: field equality for all rows
+    const reader = await parquetjs.ParquetReader.openBuffer(Buffer.from(bytes));
+    const cursor = reader.getCursor();
+    const back: Record<string, unknown>[] = [];
+    let rec;
+    while ((rec = await cursor.next())) back.push(rec as Record<string, unknown>);
+    await reader.close();
+    expect(back).toHaveLength(N);
+    const orig = await prisma.priceObservation.findMany({ orderBy: { id: "asc" } });
+    for (let i = 0; i < N; i++) {
+      expect(BigInt(back[i]!.id as bigint)).toBe(orig[i]!.id);
+      expect(back[i]!.listingId).toBe(orig[i]!.listingId);
+      expect(back[i]!.priceCents).toBe(orig[i]!.priceCents);
+      expect((back[i]!.effectiveAt as Date).getTime()).toBe(orig[i]!.effectiveAt.getTime());
+      expect(back[i]!.status).toBe(orig[i]!.status);
+      expect(back[i]!.dataSourceKey).toBe(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+    }
+
+    // rerun: checkpoint advanced → no new files anywhere
+    const listingFiles = async (d: string): Promise<string[]> => {
+      const out: string[] = [];
+      const walk = async (x: string) => {
+        for (const e of await readdir(x, { withFileTypes: true })) {
+          const f = path.join(x, e.name);
+          if (e.isDirectory()) await walk(f);
+          else out.push(f);
+        }
+      };
+      await walk(d);
+      return out;
+    };
+    const filesBefore = await listingFiles(dir);
+    const r2 = await exportObservationBatches(prisma, archive, { destination: dir });
+    expect(r2.batches).toBe(0);
+    expect(await listingFiles(dir)).toEqual(filesBefore);
+
+    // idempotent batch semantics: same key + same sha256 → skipped, not rewritten
+    const manifestText = await readFile(
+      path.join(dir, key.replace(/\.parquet$/, ".manifest.json")),
+      "utf8",
+    );
+    expect(manifestText).toContain(fileHash);
+    console.log("ARCHIVE_DIR", dir);
   });
 });

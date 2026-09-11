@@ -51,13 +51,14 @@ tables; "current price" is always derived from the newest eligible observation.
 - [docs/API.md](docs/API.md) · [docs/DATA_MODEL.md](docs/DATA_MODEL.md) ·
   [docs/SCORING.md](docs/SCORING.md) · [docs/EXTENSION.md](docs/EXTENSION.md) ·
   [docs/PRIVACY.md](docs/PRIVACY.md) · [docs/CATALOG_IDENTITY.md](docs/CATALOG_IDENTITY.md) ·
-  [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md) · [docs/DATA_PLATFORM.md](docs/DATA_PLATFORM.md)
+  [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md) · [docs/DATA_PLATFORM.md](docs/DATA_PLATFORM.md) · [docs/ARCHIVE_FORMAT.md](docs/ARCHIVE_FORMAT.md)
 - ADRs: [observation immutability](docs/adr/ADR-001-observation-immutability.md) ·
   [identifiers & types](docs/adr/ADR-002-identifiers-and-database-types.md) ·
   [provenance](docs/adr/ADR-003-provenance.md) ·
   [client vs server time](docs/adr/ADR-004-client-time-vs-server-time.md) ·
   [catalog identity](docs/adr/ADR-005-catalog-identity.md) ·
-  [data quality](docs/adr/ADR-006-data-quality.md)
+  [data quality](docs/adr/ADR-006-data-quality.md) ·
+  [archive format](docs/adr/ADR-007-archive-format.md)
 - Migration notes: [docs/migrations/2026-09-data-foundation.md](docs/migrations/2026-09-data-foundation.md)
 
 ### API quickstart

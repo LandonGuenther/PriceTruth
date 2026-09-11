@@ -310,3 +310,14 @@ model JobCheckpoint {
   cursor    String
   updatedAt DateTime @updatedAt
 }
+
+/** One exported parquet batch (M5) — dedup + integrity record. */
+model ArchiveBatch {
+  id                  BigInt   @id @default(autoincrement())
+  key                 String   @unique
+  firstObservationId  BigInt
+  lastObservationId   BigInt
+  rowCount            Int
+  sha256              String   @db.Char(64)
+  createdAt           DateTime @default(now())
+}

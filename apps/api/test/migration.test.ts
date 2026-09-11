@@ -54,6 +54,7 @@ describeIfDb("migration paths", () => {
       "20260911064204_catalog_identity_model_backfill",
       "20260911065530_observation_trust",
       "20260911070434_daily_rollup",
+      "20260911070927_archive_batches",
     ]);
 
     // Drift check: nothing needed to reach the datamodel except objects Prisma

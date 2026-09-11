@@ -11,6 +11,8 @@ const envSchema = z.object({
     .transform((v) => (v ? v : undefined)),
   /** Comma-separated list of extra allowed CORS origins (chrome-extension:// is always allowed). */
   CORS_ORIGINS: z.string().optional(),
+  /** Root dir for the local observation archive (jobs archive). */
+  ARCHIVE_LOCAL_DIR: z.string().default("./archive"),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

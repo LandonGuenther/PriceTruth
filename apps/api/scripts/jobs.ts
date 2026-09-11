@@ -6,6 +6,8 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { runDailyRollupJob } from "../src/jobs/dailyRollup.js";
+import { exportObservationBatches } from "../src/archive/exporter.js";
+import { LocalFilesystemArchive } from "../src/archive/localFilesystem.js";
 
 const prisma = new PrismaClient();
 
@@ -22,6 +24,16 @@ async function main() {
     console.log(
       `rollup: ${r.rolledDays} listing-day(s) recomputed ` +
         `(${r.scannedObservations} observations, ${r.scannedEvents} status events scanned)`,
+    );
+  } else if (cmd === "archive") {
+    const dir = flag("dir") ?? process.env.ARCHIVE_LOCAL_DIR ?? "./archive";
+    const maxBatches = flag("max-batches") === undefined ? undefined : Number(flag("max-batches"));
+    const r = await exportObservationBatches(prisma, new LocalFilesystemArchive(dir), {
+      maxBatches,
+      destination: dir,
+    });
+    console.log(
+      `archive: ${r.batches} batch(es) written (${r.rows} rows exported, ${r.skipped} existing batch(es) skipped) → ${dir}`,
     );
   } else {
     throw new Error(`unknown job: ${cmd}`);

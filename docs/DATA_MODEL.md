@@ -64,6 +64,9 @@ Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
   docs/DATA_PLATFORM.md).
 - **JobCheckpoint** — durable cursor rows (`jobName`, `cursor`, `updatedAt`)
   for batch jobs (`rollup:*`, `archive:*`).
+- **ArchiveBatch** — ledger of exported parquet partitions (`key` unique,
+  first/last observation id, `rowCount`, `sha256`, `createdAt`). The archive
+  itself lives outside Postgres — see docs/ARCHIVE_FORMAT.md.
 
 ## Integrity constraints
 
