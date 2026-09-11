@@ -7,8 +7,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "format": "pnpm -r --if-present run format",
-    "format:check": "pnpm -r --if-present run format:check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
     "build": "pnpm -r --if-present run build"
@@ -24,7 +24,10 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
     ]
   }
 }
