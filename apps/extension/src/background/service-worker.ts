@@ -29,7 +29,8 @@ const deps = {
       return false;
     }
   },
-  schedule: (fn: () => void, ms: number) => void setTimeout(fn, ms),
+  schedule: (fn: () => void, ms: number) => setTimeout(fn, ms),
+  cancelSchedule: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
