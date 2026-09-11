@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import type { RetailerObservation } from "@pricetruth/shared";
 import { OBSERVATION_SOURCES } from "@pricetruth/shared";
 import { buildApp } from "../src/app.js";
-import type { AppConfig } from "../src/config.js";
+import { loadConfig, type AppConfig } from "../src/config.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
 import type { FastifyInstance } from "fastify";
 
@@ -16,9 +16,10 @@ export const prisma = new PrismaClient(
 );
 
 export const testConfig = (overrides: Partial<AppConfig> = {}): AppConfig => ({
-  DATABASE_URL: DATABASE_URL ?? "postgresql://unused",
-  PORT: 3000,
-  HOST: "127.0.0.1",
+  ...loadConfig({
+    DATABASE_URL: DATABASE_URL ?? "postgresql://unused:unused@127.0.0.1:5432/unused",
+    NODE_ENV: "test",
+  }),
   ...overrides,
 });
 

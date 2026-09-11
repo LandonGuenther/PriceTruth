@@ -10,7 +10,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { mpnMatchKey } from "@pricetruth/catalog";
 import { buildApp } from "../src/app.js";
-import type { AppConfig } from "../src/config.js";
+import { loadConfig } from "../src/config.js";
 import { PostgresPriceHistoryRepository } from "../src/repositories/priceHistoryRepository.js";
 import { runDailyRollupJob } from "../src/jobs/dailyRollup.js";
 import { exportObservationBatches } from "../src/archive/exporter.js";
@@ -56,12 +56,10 @@ async function main() {
   });
   const sample = Array.from({ length: 50 }, () => all[Math.floor(rng() * all.length)]!);
   const repo = new PostgresPriceHistoryRepository(prisma);
-  const config: AppConfig = {
+  const config = loadConfig({
     DATABASE_URL: process.env.DATABASE_URL!,
-    PORT: 0,
-    HOST: "127.0.0.1",
-    ARCHIVE_LOCAL_DIR: "./archive",
-  };
+    NODE_ENV: "test",
+  });
   const app = await buildApp({ prisma, config });
 
   // sequential requests, one unique remoteAddress each so the per-IP

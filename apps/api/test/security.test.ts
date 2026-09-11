@@ -297,16 +297,54 @@ describeIfDb("adversarial request handling", () => {
   });
 
   describe("rate limiting", () => {
-    it("121 requests from one address → last is 429", async () => {
+    it("read class: 241st GET analysis from one address → 429", async () => {
       const app = await makeApp();
       const addr = "10.9.9.9";
       let last = 0;
-      for (let i = 0; i < 121; i++) {
+      for (let i = 0; i < 241; i++) {
         const res = await app.inject({
           method: "GET",
-          url: "/health",
+          url: "/v1/listings/amazon/B000000001/analysis",
           remoteAddress: addr,
         });
+        last = res.statusCode;
+      }
+      expect(last).toBe(429);
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/listings/amazon/B000000001/analysis",
+        remoteAddress: addr,
+      });
+      expect(res.statusCode).toBe(429);
+      const body = res.json();
+      expect(body.error).toBe("rate_limited");
+      expect(typeof body.retryAfterSeconds).toBe("number");
+      await app.close();
+    });
+
+    it("ingest class: 61st POST observations from one address → 429", async () => {
+      const app = await makeApp();
+      const addr = "10.8.8.8";
+      let last = 0;
+      for (let i = 0; i < 61; i++) {
+        const res = await app.inject({
+          method: "POST",
+          url: "/v1/observations",
+          remoteAddress: addr,
+          payload: { schemaVersion: 999 },
+        });
+        last = res.statusCode;
+      }
+      expect(last).toBe(429);
+      await app.close();
+    });
+
+    it("health class: 601st GET /health from one address → 429", async () => {
+      const app = await makeApp();
+      const addr = "10.7.7.7";
+      let last = 0;
+      for (let i = 0; i < 601; i++) {
+        const res = await app.inject({ method: "GET", url: "/health", remoteAddress: addr });
         last = res.statusCode;
       }
       expect(last).toBe(429);

@@ -15,7 +15,7 @@
 import { PrismaClient } from "@prisma/client";
 import { OBSERVATION_SOURCES, DATA_SOURCE_DEFINITIONS } from "@pricetruth/shared";
 import { ingestObservation } from "../src/services/observationService.js";
-import type { AppConfig } from "../src/config.js";
+import { loadConfig } from "../src/config.js";
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -182,12 +182,10 @@ async function main() {
   );
 
   // API-path ingestion timing: 200 sequential ingestObservation calls.
-  const config = {
+  const config = loadConfig({
     DATABASE_URL: process.env.DATABASE_URL!,
-    PORT: 0,
-    HOST: "x",
-    BESTBUY_API_KEY: undefined,
-  } as AppConfig;
+    NODE_ENV: "test",
+  });
   const times: number[] = [];
   for (let i = 0; i < 200; i++) {
     const l = listingIds[Math.floor(rng() * listingIds.length)]!;

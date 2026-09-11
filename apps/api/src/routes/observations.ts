@@ -5,9 +5,20 @@ import {
   retailerObservationSchema,
 } from "@pricetruth/shared";
 import { ingestObservation } from "../services/observationService.js";
+import { API_VERSION } from "../apiVersion.js";
 
 export function observationRoutes(app: FastifyInstance): void {
-  app.post("/v1/observations", async (request, reply) => {
+  app.post(
+    "/v1/observations",
+    {
+      config: {
+        rateLimit: {
+          max: app.config.RATE_LIMIT_INGEST_PER_MINUTE,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request, reply) => {
     const body = request.body as { schemaVersion?: unknown } | undefined;
     if (
       typeof body?.schemaVersion === "number" &&
@@ -43,6 +54,9 @@ export function observationRoutes(app: FastifyInstance): void {
       app.fetchImpl,
     );
 
-    return reply.status(result.accepted ? 201 : 200).send(result);
-  });
+    return reply
+      .status(result.accepted ? 201 : 200)
+      .send({ ...result, apiVersion: API_VERSION });
+    },
+  );
 }
