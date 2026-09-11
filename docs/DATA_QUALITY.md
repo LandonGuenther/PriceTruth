@@ -58,6 +58,14 @@ DataSource or on a different UTC day (`effectiveAt`). `EXCLUDED` rows are never
 touched. This is how a genuine price drop self-heals: a second day or source
 confirms it and the row re-enters analysis as CORROBORATED.
 
+## Known limitations
+
+- A QUARANTINED row can be corroborated by _another QUARANTINED row_ — including
+  one from the same source on a different UTC day — so a single client posting a
+  poisoned price on ≥2 days can heal it. Mitigation is PLANNED: require a
+  different DataSource or an installation-level signal (installation IDs are
+  deliberately NOT implemented — see docs/PRIVACY.md).
+
 ## IMPLEMENTED vs PLANNED
 
 IMPLEMENTED: status lifecycle + actor audit, centralized eligibility, anomaly

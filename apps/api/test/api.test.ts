@@ -12,6 +12,8 @@ import {
 } from "./helpers.js";
 import { setObservationStatus } from "../src/services/observationService.js";
 import { corroborateListing } from "../src/services/dataQuality/corroboration.js";
+import { runDailyRollupJob } from "../src/jobs/dailyRollup.js";
+import { collapseToDailySeries } from "@pricetruth/scoring";
 import { linkListing, unlinkListing } from "../src/services/catalogService.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
 
@@ -1042,5 +1044,134 @@ describeIfDb("api integration", () => {
       (await prisma.priceObservation.findUniqueOrThrow({ where: { id: sameSource.id } })).status,
     ).toBe("ACCEPTED");
     await app.close();
+  });
+
+  // ---- daily rollup (M4) ---------------------------------------------------
+
+  const seedRawObs = async (
+    listingId: string,
+    rows: Array<{ priceCents: number; effectiveAt: Date; referencePriceCents?: number }>,
+    status: "ACCEPTED" | "QUARANTINED" = "ACCEPTED",
+  ) => {
+    const dsId = await dataSourceId(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
+    for (const r of rows) {
+      await prisma.priceObservation.create({
+        data: {
+          listingId,
+          dataSourceId: dsId,
+          priceCents: r.priceCents,
+          priceType: "STANDARD",
+          referencePriceCents: r.referencePriceCents ?? null,
+          referenceType: r.referencePriceCents === undefined ? null : "UNKNOWN",
+          currency: "USD",
+          effectiveAt: r.effectiveAt,
+          status,
+          schemaVersion: 1,
+          synthetic: false,
+        },
+      });
+    }
+  };
+
+  const day0 = "2026-09-08";
+  const day1 = "2026-09-09";
+
+  it("daily rollup: deterministic, equals collapseToDailySeries, restartable, re-rolls on status flip", async () => {
+    await prisma.retailer.upsert({
+      where: { id: "amazon" },
+      update: {},
+      create: { id: "amazon", displayName: "Amazon" },
+    });
+    const listing = await prisma.listing.create({
+      data: {
+        retailerId: "amazon",
+        externalId: "B0ROLLUP01",
+        url: "https://www.amazon.com/dp/B0ROLLUP01",
+        title: "Rollup Widget",
+      },
+    });
+    const t = (day: string, hh = 12) => new Date(`${day}T${String(hh).padStart(2, "0")}:00:00Z`);
+    await seedRawObs(listing.id, [
+      { priceCents: 10000, effectiveAt: t(day0, 8), referencePriceCents: 12000 },
+      { priceCents: 11000, effectiveAt: t(day0, 12) },
+      { priceCents: 12000, effectiveAt: t(day0, 16) },
+      { priceCents: 20000, effectiveAt: t(day1, 9) },
+      { priceCents: 21000, effectiveAt: t(day1, 15), referencePriceCents: 25000 },
+      // quarantined row must not contribute
+    ]);
+    await seedRawObs(listing.id, [{ priceCents: 500, effectiveAt: t(day1, 20) }], "QUARANTINED");
+
+    const r1 = await runDailyRollupJob(prisma);
+    expect(r1.rolledDays).toBe(2);
+    const rows1 = await prisma.listingDailyPrice.findMany({
+      where: { listingId: listing.id },
+      orderBy: { day: "asc" },
+    });
+    expect(rows1).toHaveLength(2);
+    expect(rows1[0]!.medianCents).toBe(11000);
+    expect(rows1[0]!.lowCents).toBe(10000);
+    expect(rows1[0]!.highCents).toBe(12000);
+    expect(rows1[0]!.firstCents).toBe(10000);
+    expect(rows1[0]!.lastCents).toBe(12000);
+    expect(rows1[0]!.eligibleObservationCount).toBe(3);
+    expect(rows1[0]!.sourceCount).toBe(1);
+    expect(rows1[0]!.referenceMedianCents).toBe(12000);
+    expect(rows1[1]!.medianCents).toBe(20500); // median(20000,21000); the 500 is out
+    expect(rows1[1]!.referenceMedianCents).toBe(25000);
+
+    // medians equal collapseToDailySeries on the eligible rows
+    const eligible = await prisma.priceObservation.findMany({
+      where: { listingId: listing.id, status: { in: ["ACCEPTED", "CORROBORATED"] } },
+      select: { priceCents: true, effectiveAt: true, referencePriceCents: true },
+      orderBy: { effectiveAt: "asc" },
+    });
+    const daily = collapseToDailySeries(
+      eligible.map((o) => ({
+        priceCents: o.priceCents,
+        referencePriceCents: o.referencePriceCents,
+        effectiveAt: o.effectiveAt.toISOString(),
+        sourceKey: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
+      })),
+    );
+    expect(rows1.map((r) => [r.day.toISOString().slice(0, 10), r.medianCents])).toEqual(
+      daily.map((d) => [d.day, d.medianPriceCents]),
+    );
+
+    // rerun with nothing new → identical rows (idempotent)
+    const r2 = await runDailyRollupJob(prisma);
+    expect(r2.rolledDays).toBe(0);
+    const rows2 = await prisma.listingDailyPrice.findMany({
+      where: { listingId: listing.id },
+      orderBy: { day: "asc" },
+    });
+    expect(rows2).toEqual(rows1);
+
+    // interrupted run: force checkpoint back to mid-stream, rerun completes
+    const firstObs = await prisma.priceObservation.findFirstOrThrow({
+      where: { listingId: listing.id },
+      orderBy: { id: "asc" },
+    });
+    await prisma.jobCheckpoint.update({
+      where: { jobName: "rollup:observations" },
+      data: { cursor: firstObs.id.toString() },
+    });
+    await runDailyRollupJob(prisma, { batchSize: 1 });
+    const rows3 = await prisma.listingDailyPrice.findMany({
+      where: { listingId: listing.id },
+      orderBy: { day: "asc" },
+    });
+    expect(rows3.map((r) => r.medianCents)).toEqual(rows1.map((r) => r.medianCents));
+
+    // status flip re-rolls the affected day via the event cursor
+    const quarantined = await prisma.priceObservation.findFirstOrThrow({
+      where: { listingId: listing.id, status: "QUARANTINED" },
+    });
+    await setObservationStatus(prisma, quarantined.id, "ACCEPTED", "manual ok", "cli:tester");
+    await runDailyRollupJob(prisma);
+    const after = await prisma.listingDailyPrice.findUniqueOrThrow({
+      where: { listingId_day: { listingId: listing.id, day: new Date(`${day1}T00:00:00Z`) } },
+    });
+    expect(after.eligibleObservationCount).toBe(3);
+    expect(after.medianCents).toBe(20000); // median(500,20000,21000) = 20000
   });
 });

@@ -1,6 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { analyzeListingRow, findListing, listingHistory } from "../services/analysisService.js";
+import {
+  analyzeListingRow,
+  defaultHistoryRepository,
+  findListing,
+  listingHistory,
+} from "../services/analysisService.js";
 
 const paramsSchema = z.object({ retailer: z.string(), externalId: z.string().min(1) });
 const historyQuerySchema = z.object({
@@ -17,7 +22,7 @@ export function listingRoutes(app: FastifyInstance): void {
     if (!listing) {
       return reply.status(404).send({ error: "listing_not_found", message: "Unknown listing" });
     }
-    return analyzeListingRow(app.prisma, listing);
+    return analyzeListingRow(defaultHistoryRepository(app.prisma), listing);
   });
 
   app.get("/v1/listings/:retailer/:externalId/history", async (request, reply) => {
@@ -35,6 +40,6 @@ export function listingRoutes(app: FastifyInstance): void {
     if (!listing) {
       return reply.status(404).send({ error: "listing_not_found", message: "Unknown listing" });
     }
-    return listingHistory(listing, query.data.days);
+    return listingHistory(defaultHistoryRepository(app.prisma), listing, query.data.days);
   });
 }

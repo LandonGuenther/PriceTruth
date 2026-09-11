@@ -57,6 +57,13 @@ Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
     only as `fromStatus` on the first status event (see docs/DATA_QUALITY.md).
 - **ObservationStatusEvent** — append-only log of `status` transitions
   (`observationId`, `fromStatus`, `toStatus`, `reason`, `actor`, `createdAt`).
+- **ListingDailyPrice** — deterministic per-listing per-UTC-day rollup of
+  eligible observations (count, low/high/median, first/last, reference median,
+  distinct `sourceCount`, `aggregationVersion`). Written by the rollup job,
+  keyed `@@unique([listingId, day])`; not yet read by analysis (PLANNED —
+  docs/DATA_PLATFORM.md).
+- **JobCheckpoint** — durable cursor rows (`jobName`, `cursor`, `updatedAt`)
+  for batch jobs (`rollup:*`, `archive:*`).
 
 ## Integrity constraints
 

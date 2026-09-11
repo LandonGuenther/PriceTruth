@@ -169,6 +169,7 @@ model Listing {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   observations PriceObservation[]
+  dailyPrices  ListingDailyPrice[]
   variants     ListingVariant[]
   assertions   IdentifierAssertion[]
   matchEvidence MatchEvidence[]
@@ -279,4 +280,33 @@ model ProductLinkEvent {
   createdAt         DateTime          @default(now())
 
   @@index([listingId, createdAt])
+}
+
+/** Precomputed per-listing per-day rollup of eligible observations (M4). */
+model ListingDailyPrice {
+  id                        BigInt   @id @default(autoincrement())
+  listingId                 String   @db.Uuid
+  listing                   Listing  @relation(fields: [listingId], references: [id])
+  day                       DateTime @db.Date
+  currency                  String   @db.Char(3)
+  eligibleObservationCount  Int
+  lowCents                  Int
+  highCents                 Int
+  medianCents               Int
+  firstCents                Int
+  lastCents                 Int
+  referenceMedianCents      Int?
+  sourceCount               Int
+  aggregationVersion        Int
+  computedAt                DateTime @default(now())
+
+  @@unique([listingId, day])
+  @@index([listingId])
+}
+
+/** Durable cursor for batch jobs (rollup, archive). */
+model JobCheckpoint {
+  jobName   String   @id
+  cursor    String
+  updatedAt DateTime @updatedAt
 }
