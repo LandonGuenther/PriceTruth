@@ -1,0 +1,70 @@
+name: staging-canary
+
+# Read-only probe of the staging API. Skips when STAGING_API_URL is not set.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    env:
+      STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+      STAGING_INTERNAL_API_TOKEN: ${{ secrets.STAGING_INTERNAL_API_TOKEN }}
+    steps:
+      - name: Probe /health and /readiness
+        run: |
+          set -u
+          if [ -z "${STAGING_API_URL}" ]; then
+            echo "staging-canary: skipped (STAGING_API_URL secret not set)"
+            exit 0
+          fi
+          base="${STAGING_API_URL%/}"
+
+          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 15 "$base/health" || echo 000)
+          echo "GET /health -> $health_code"; cat /tmp/health.json 2>/dev/null; echo
+
+          ready_code=$(curl -sS -o /tmp/readiness.json -w '%{http_code}' --max-time 15 "$base/readiness" || echo 000)
+          echo "GET /readiness -> $ready_code"; cat /tmp/readiness.json 2>/dev/null; echo
+          if [ "$ready_code" != "200" ]; then
+            echo "::error::staging readiness returned $ready_code"
+            exit 1
+          fi
+
+      - name: Check observation freshness via /internal/status
+        run: |
+          set -u
+          if [ -z "${STAGING_API_URL}" ]; then
+            echo "staging-canary: skipped (STAGING_API_URL secret not set)"
+            exit 0
+          fi
+          if [ -z "${STAGING_INTERNAL_API_TOKEN}" ]; then
+            echo "freshness check skipped (STAGING_INTERNAL_API_TOKEN secret not set)"
+            exit 0
+          fi
+          base="${STAGING_API_URL%/}"
+          code=$(curl -sS -o /tmp/status.json -w '%{http_code}' --max-time 15 \
+            -H "Authorization: Bearer ${STAGING_INTERNAL_API_TOKEN}" "$base/internal/status" || echo 000)
+          echo "GET /internal/status -> $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::/internal/status returned $code"
+            exit 1
+          fi
+          jq '{latestObservationReceivedAt, observationsLast24h, statusDistribution, rollup: .rollup.lagObservations, archive: .archive.lagObservations}' /tmp/status.json
+
+          latest=$(jq -r '.latestObservationReceivedAt // empty' /tmp/status.json)
+          if [ -z "$latest" ]; then
+            echo "::error::no observations recorded yet (latestObservationReceivedAt is null)"
+            exit 1
+          fi
+          latest_epoch=$(date -u -d "$latest" +%s)
+          age_hours=$(( ( $(date -u +%s) - latest_epoch ) / 3600 ))
+          echo "latest observation: $latest (${age_hours}h ago)"
+          if [ "$age_hours" -ge 48 ]; then
+            echo "::error::latest observation is ${age_hours}h old (limit 48h)"
+            exit 1
+          fi

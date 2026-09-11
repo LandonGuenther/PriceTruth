@@ -181,6 +181,20 @@ payload mirrors `pnpm --filter @pricetruth/api ops status`:
 `/internal/status` straight from the DB (no auth needed — it already holds
 `DATABASE_URL`).
 
+Read-only inspection subcommands (`pnpm ops <cmd>` from the repo root, JSON
+output, BigInt ids as strings): `recent [--limit N]` (latest observations with
+retailer/externalId/price/status/source/times), `listing <retailer> <externalId>`
+(listing row, linked product + identifiers, variants, identifier assertions, last
+50 observations, `ListingDailyPrice` rows, and the live analysis result),
+`quarantined [--limit N]` (QUARANTINED/EXCLUDED observations with their latest
+status-event reason) and `jobs [--limit N]` (recent `JobRun` rows + all
+`JobCheckpoint` rows incl. lease fields). `remote` (`pnpm ops:status`) needs no
+`DATABASE_URL`: it GETs `/health`, `/readiness` and — when `INTERNAL_API_TOKEN`
+is set — `/internal/status` at `PRICETRUTH_API_URL`, prints statuses + bodies
+(never the token) and exits 1 unless readiness is 200. The `staging-canary`
+workflow runs the same probes every 6 hours and fails when the newest
+observation is older than 48 h (skips when `STAGING_API_URL` is unset).
+
 ## Container
 
 `apps/api/Dockerfile` builds a production image (multi-stage, node:22-alpine,

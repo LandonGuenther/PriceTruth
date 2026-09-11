@@ -11,17 +11,17 @@ const apiDir = path.resolve(here, "..");
 const SCRATCH = "pricetruth_migration_test";
 
 const scratchUrl = (): string => {
-  const base = new URL(process.env.DATABASE_URL!);
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is required for migration tests");
+  const base = new URL(url);
   base.pathname = `/${SCRATCH}`;
   return base.toString();
 };
 
-const prismaEnv = { ...process.env, DATABASE_URL: scratchUrl() };
-
 function prismaCli(args: string): string {
   return execSync(`pnpm exec prisma ${args}`, {
     cwd: apiDir,
-    env: prismaEnv,
+    env: { ...process.env, DATABASE_URL: scratchUrl() },
     encoding: "utf8",
   });
 }

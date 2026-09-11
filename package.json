@@ -11,7 +11,9 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
-    "build": "pnpm -r --if-present run build"
+    "build": "pnpm -r --if-present run build",
+    "ops": "pnpm --filter @pricetruth/api ops",
+    "ops:status": "pnpm --filter @pricetruth/api ops remote"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

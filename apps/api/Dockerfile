@@ -27,7 +27,9 @@ RUN pnpm --filter @pricetruth/api exec prisma generate \
   && pnpm --filter @pricetruth/api... build
 
 FROM node:22-alpine
-RUN corepack enable && addgroup -S app && adduser -S app -G app
+RUN corepack enable \
+  && addgroup -S app && adduser -S app -G app \
+  && apk add --no-cache su-exec
 WORKDIR /app
 ENV NODE_ENV=production
 ARG APP_VERSION=dev
@@ -37,12 +39,15 @@ COPY --from=build --chown=app:app /repo/node_modules ./node_modules
 COPY --from=build --chown=app:app /repo/package.json /repo/pnpm-workspace.yaml ./
 COPY --from=build --chown=app:app /repo/packages ./packages
 COPY --from=build --chown=app:app /repo/apps/api ./apps/api
+COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1
 
 WORKDIR /app/apps/api
-# Migrations run via: docker run ... pnpm exec prisma migrate deploy
+# Entrypoint runs as root only long enough to chown /data, then drops to app.
+# Migrations: docker run ... pnpm exec prisma migrate deploy
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/src/server.js"]
