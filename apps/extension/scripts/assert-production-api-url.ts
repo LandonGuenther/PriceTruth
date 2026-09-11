@@ -16,8 +16,10 @@ export function assertProductionApiUrl(url: string | undefined | null): string {
   } catch {
     throw new Error(`VITE_API_BASE_URL is not a valid URL: ${trimmed}`);
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`VITE_API_BASE_URL must be an http(s) URL (got ${trimmed})`);
+  if (parsed.protocol !== "https:") {
+    throw new Error(
+      `VITE_API_BASE_URL must be an https URL for production packaging (got ${trimmed})`,
+    );
   }
   const host = parsed.hostname.toLowerCase();
   if (

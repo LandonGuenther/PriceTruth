@@ -3,9 +3,12 @@ import {
   ApiClient,
   ApiError,
   ApiMalformedError,
+  ApiRateLimitedError,
   ApiUnsupportedVersionError,
   API_VERSION_HEADER,
   CLIENT_API_SCHEMA_MAJOR,
+  OBSERVATION_SCHEMA_VERSION_HEADER,
+  REQUEST_ID_HEADER,
   parseAnalysisResponse,
   parseApiVersionMajor,
   parseHistoryResponse,
@@ -197,6 +200,56 @@ describe("ApiClient", () => {
     await expect(client.getAnalysis("amazon", "B0TESTASIN")).rejects.toBeInstanceOf(ApiError);
     expect(spy).toHaveBeenCalledOnce();
   });
+
+  it("throws ApiRateLimitedError with retryAfterSeconds on 429 (no retry)", async () => {
+    const spy = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "rate_limited", message: "slow down", retryAfterSeconds: 7 }), {
+          status: 429,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", spy);
+    const client = new ApiClient("http://x");
+    await expect(client.getAnalysis("amazon", "B0TESTASIN")).rejects.toMatchObject({
+      name: "ApiRateLimitedError",
+      retryAfterSeconds: 7,
+    });
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("sends x-request-id and tolerates observation schema version header", async () => {
+    const spy = vi.fn((_url: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get(REQUEST_ID_HEADER)).toBeTruthy();
+      return Promise.resolve(
+        new Response(JSON.stringify(ingestOk), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            [API_VERSION_HEADER]: "1",
+            [OBSERVATION_SCHEMA_VERSION_HEADER]: "1",
+          },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", spy);
+    const client = new ApiClient("http://x");
+    await client.postObservation({
+      retailer: "amazon",
+      externalId: "B0TESTASIN",
+      url: "https://www.amazon.com/dp/B0TESTASIN",
+      title: "W",
+      priceCents: 1,
+      currency: "USD",
+      source: "extension:content-script",
+      observedAt: "2025-06-30T12:00:00.000Z",
+      schemaVersion: 1,
+      priceType: "STANDARD",
+    });
+    expect(spy).toHaveBeenCalledOnce();
+  });
 });
 
 describe("response parsers", () => {
@@ -208,14 +261,33 @@ describe("response parsers", () => {
     expect(parseApiVersionMajor("nope")).toBeNull();
   });
 
-  it("parseIngestResponse requires core fields and drops extras", () => {
+  it("parseIngestResponse requires core fields and keeps typed additive fields", () => {
     expect(parseIngestResponse(ingestOk)).toEqual({
       accepted: true,
       duplicate: false,
       listingId: "l1",
       observationId: "o1",
     });
+    expect(
+      parseIngestResponse({
+        ...ingestOk,
+        status: "ACCEPTED",
+        apiVersion: 1,
+        enrichment: { bestbuyApi: "skipped" },
+      }),
+    ).toEqual({
+      accepted: true,
+      duplicate: false,
+      listingId: "l1",
+      observationId: "o1",
+      status: "ACCEPTED",
+      apiVersion: 1,
+      enrichment: { bestbuyApi: "skipped" },
+    });
     expect(() => parseIngestResponse({ accepted: true })).toThrow(ApiMalformedError);
+    expect(() =>
+      parseIngestResponse({ ...ingestOk, enrichment: { bestbuyApi: 1 } }),
+    ).toThrow(ApiMalformedError);
   });
 
   it("parseAnalysisResponse tolerates unknown fields and missing evidence", () => {

@@ -11,6 +11,12 @@ export interface IngestResponse {
   duplicate: boolean;
   listingId: string;
   observationId: string;
+  /** Additive (Devin backend): ObservationStatus after ingest. */
+  status?: string;
+  /** Additive: Best Buy enrichment outcome. */
+  enrichment?: { bestbuyApi: string };
+  /** Additive: API wire version echoed on success bodies. */
+  apiVersion?: number;
 }
 
 /** Response header advertising the API's wire/schema major version. */
@@ -21,6 +27,18 @@ export const API_VERSION_HEADER = "x-pricetruth-api-version";
  * A response advertising a greater major is treated as unsupported.
  */
 export const CLIENT_API_SCHEMA_MAJOR = 1;
+
+/** Response header advertising the observation wire schema major. */
+export const OBSERVATION_SCHEMA_VERSION_HEADER = "x-pricetruth-observation-schema-version";
+
+/** Echoed/correlation request id (client may supply; server always returns one). */
+export const REQUEST_ID_HEADER = "x-request-id";
+
+/**
+ * Highest observation schema major this client understands.
+ * A response advertising a greater major is treated as unsupported.
+ */
+export const CLIENT_OBSERVATION_SCHEMA_MAJOR = 1;
 
 export class ApiError extends Error {
   constructor(
@@ -55,6 +73,16 @@ export class ApiUnsupportedVersionError extends Error {
       `API schema major ${serverMajor} is newer than this client (supports ${clientMajor})`,
     );
     this.name = "ApiUnsupportedVersionError";
+  }
+}
+
+export class ApiRateLimitedError extends Error {
+  constructor(
+    public readonly retryAfterSeconds: number,
+    message = "Rate limited by API",
+  ) {
+    super(message);
+    this.name = "ApiRateLimitedError";
   }
 }
 
@@ -118,12 +146,28 @@ export function assertApiVersionCompatible(
 
 export function parseIngestResponse(body: unknown): IngestResponse {
   if (!isRecord(body)) throw new ApiMalformedError("ingest response is not an object");
-  return {
+  const result: IngestResponse = {
     accepted: requireBoolean(body.accepted, "accepted"),
     duplicate: requireBoolean(body.duplicate, "duplicate"),
     listingId: requireString(body.listingId, "listingId"),
     observationId: requireString(body.observationId, "observationId"),
   };
+  // Additive fields: validate type when present; never require them (older servers).
+  if (body.status !== undefined) {
+    result.status = requireString(body.status, "status");
+  }
+  if (body.apiVersion !== undefined) {
+    result.apiVersion = requireNumber(body.apiVersion, "apiVersion");
+  }
+  if (body.enrichment !== undefined) {
+    if (!isRecord(body.enrichment)) {
+      throw new ApiMalformedError("expected object at enrichment");
+    }
+    result.enrichment = {
+      bestbuyApi: requireString(body.enrichment.bestbuyApi, "enrichment.bestbuyApi"),
+    };
+  }
+  return result;
 }
 
 function parseScoreResult(v: unknown, path: string): {
@@ -302,6 +346,10 @@ export class ApiClient {
   ): Promise<T> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const requestId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `pt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     try {
       const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
         credentials: "omit",
@@ -310,11 +358,35 @@ export class ApiClient {
         headers: {
           "content-type": "application/json",
           [CLIENT_VERSION_HEADER]: this.clientVersion,
+          [REQUEST_ID_HEADER]: requestId,
           ...(init.headers ?? {}),
         },
       });
       assertApiVersionCompatible(res.headers.get(API_VERSION_HEADER));
+      assertApiVersionCompatible(
+        res.headers.get(OBSERVATION_SCHEMA_VERSION_HEADER),
+        CLIENT_OBSERVATION_SCHEMA_MAJOR,
+      );
       if (!res.ok) {
+        if (res.status === 429) {
+          let retryAfterSeconds = 0;
+          try {
+            const errBody: unknown = await res.json();
+            if (
+              isRecord(errBody) &&
+              typeof errBody.retryAfterSeconds === "number" &&
+              Number.isFinite(errBody.retryAfterSeconds)
+            ) {
+              retryAfterSeconds = Math.max(0, Math.ceil(errBody.retryAfterSeconds));
+            }
+          } catch {
+            // body optional; still surface rate limit
+          }
+          throw new ApiRateLimitedError(
+            retryAfterSeconds,
+            `API rate limited for ${path} (retry after ${retryAfterSeconds}s)`,
+          );
+        }
         throw new ApiError(res.status, `API ${res.status} for ${path}`);
       }
       let body: unknown;

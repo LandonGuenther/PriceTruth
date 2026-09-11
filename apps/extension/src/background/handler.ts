@@ -4,6 +4,7 @@ import { DIAGNOSTICS_KEY, tabStateKey } from "../messages.js";
 import {
   ApiError,
   ApiMalformedError,
+  ApiRateLimitedError,
   ApiTimeoutError,
   ApiUnsupportedVersionError,
   type ApiClient,
@@ -34,6 +35,7 @@ export const NAVIGATION_PING_DELAY_MS = 1500;
 const unreachableMessage = `Could not reach the ${PRODUCT_NAME} service. Check that it is running and try again.`;
 const timeoutMessage = `The ${PRODUCT_NAME} service took too long to respond. Try again in a moment.`;
 const apiMessage = `The ${PRODUCT_NAME} service returned an error. Try again in a moment.`;
+const rateLimitedMessage = `The ${PRODUCT_NAME} service is busy. Please wait a moment and try again.`;
 const malformedMessage = `The ${PRODUCT_NAME} service returned an unexpected response. Try updating the extension.`;
 const unsupportedMessage = `This extension is out of date for the ${PRODUCT_NAME} service. Please update the extension.`;
 const ambiguousMessage = `${PRODUCT_NAME} found this product but could not confidently determine its current price. Nothing was recorded.`;
@@ -74,12 +76,22 @@ async function getState(deps: HandlerDeps, tabId: number): Promise<TabState | un
 }
 
 function classifyError(err: unknown): {
-  kind: "network" | "api" | "timeout" | "malformed" | "unsupported_version" | "unknown";
+  kind:
+    | "network"
+    | "api"
+    | "timeout"
+    | "malformed"
+    | "unsupported_version"
+    | "rate_limited"
+    | "unknown";
   message: string;
 } {
   if (err instanceof ApiTimeoutError) return { kind: "timeout", message: timeoutMessage };
   if (err instanceof ApiUnsupportedVersionError) {
     return { kind: "unsupported_version", message: unsupportedMessage };
+  }
+  if (err instanceof ApiRateLimitedError) {
+    return { kind: "rate_limited", message: rateLimitedMessage };
   }
   if (err instanceof ApiMalformedError) return { kind: "malformed", message: malformedMessage };
   if (err instanceof ApiError) return { kind: "api", message: apiMessage };

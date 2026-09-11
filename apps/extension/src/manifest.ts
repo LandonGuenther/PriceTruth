@@ -9,6 +9,9 @@ import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@pricetruth/shared";
  * - "storage" — chrome.storage.session holds per-tab state (never persisted).
  * Retailer page access comes only from content_scripts.matches; the sole
  * host_permission is the PriceTruth API itself.
+ *
+ * The `key` field pins a stable extension id (hkpcfcjmogoaakoemandjkkdgnhpdejk) so staging/production
+ * can set ALLOWED_EXTENSION_IDS. Only the public key is committed.
  */
 export function buildManifest(version: string, apiOrigin: string) {
   return {
@@ -16,6 +19,8 @@ export function buildManifest(version: string, apiOrigin: string) {
     name: PRODUCT_NAME,
     description: PRODUCT_TAGLINE,
     version,
+    // Public key only — stable unpacked/packed extension id: hkpcfcjmogoaakoemandjkkdgnhpdejk
+    key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtRCZCu16G2p4ey1tm2+hY7SQkM79Dq4A2FuvI0JyEw1sUxa00ARY4JY+CRYoxCZqPkDSwo29Dgn+9S8TqFlXl5IxIQJeYtsJBSP4MhDf+JiXvYF7OdymfFQfDuvlwGTRuMfQWxBPWhCSLAyaZ8aAadTa/5FshsIgDq6nXtmxW9Nk0qYG1qdRLIsqzngiV275UI/7gQDeNbQpPV2RsRiGeLFpzVHxz6A086dlJ8P9LDpNjwiiSd0voiI3kA8mCVfJtLW8mgplIJgDXW5lFJbWVKimIlYh4l5xxrGZNthgbUDbYpzhpIuzlUjROc7Sj4x0MyV/t4YCwKWQFo3zvgRd7QIDAQAB",
     minimum_chrome_version: "114",
     permissions: ["sidePanel", "storage"],
     host_permissions: [`${apiOrigin}/*`],

@@ -9,14 +9,15 @@ describe("assertProductionApiUrl", () => {
   });
 
   it("rejects localhost and loopback hosts", () => {
-    expect(() => assertProductionApiUrl("http://localhost:3000")).toThrow(/localhost/);
-    expect(() => assertProductionApiUrl("http://127.0.0.1:3000")).toThrow(/localhost/);
-    expect(() => assertProductionApiUrl("http://[::1]:3000")).toThrow(/localhost/);
+    expect(() => assertProductionApiUrl("https://localhost:3000")).toThrow(/localhost/);
+    expect(() => assertProductionApiUrl("https://127.0.0.1:3000")).toThrow(/localhost/);
+    expect(() => assertProductionApiUrl("https://[::1]:3000")).toThrow(/localhost/);
   });
 
-  it("rejects non-http(s) and invalid URLs", () => {
+  it("rejects non-https and invalid URLs", () => {
     expect(() => assertProductionApiUrl("not a url")).toThrow(/not a valid URL/);
-    expect(() => assertProductionApiUrl("ftp://api.example.com")).toThrow(/http\(s\)/);
+    expect(() => assertProductionApiUrl("ftp://api.example.com")).toThrow(/https/);
+    expect(() => assertProductionApiUrl("http://api.example.com")).toThrow(/https/);
   });
 
   it("accepts a public https origin", () => {

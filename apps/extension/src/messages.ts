@@ -77,7 +77,7 @@ export type TabState =
       observation?: RetailerObservation;
       message: string;
       updatedAt: string;
-      kind: "network" | "api" | "timeout" | "malformed" | "unsupported_version" | "unknown";
+      kind: "network" | "api" | "timeout" | "malformed" | "unsupported_version" | "rate_limited" | "unknown";
       generation?: number;
     };
 
