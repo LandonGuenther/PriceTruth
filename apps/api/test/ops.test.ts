@@ -12,11 +12,37 @@ import {
 
 const TOKEN = "test-internal-token-0123456789abcdef";
 
+const AUTH = { authorization: `Bearer ${TOKEN}` };
+const internalApp = () => makeApp(testConfig({ INTERNAL_API_TOKEN: TOKEN }));
+
 describe("internal metrics", () => {
+  it("404s when INTERNAL_API_TOKEN is unset or the token is missing/wrong", async () => {
+    const app = await makeApp(testConfig({ INTERNAL_API_TOKEN: undefined }));
+    expect((await app.inject({ method: "GET", url: "/internal/metrics" })).statusCode).toBe(404);
+    await app.close();
+
+    const app2 = await internalApp();
+    expect((await app2.inject({ method: "GET", url: "/internal/metrics" })).statusCode).toBe(404);
+    expect(
+      (
+        await app2.inject({
+          method: "GET",
+          url: "/internal/metrics",
+          headers: { authorization: "Bearer wrong" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    await app2.close();
+  });
+
   it("returns counters and durations as JSON", async () => {
-    const app = await makeApp();
+    const app = await internalApp();
     await app.inject({ method: "GET", url: "/health" });
-    const res = await app.inject({ method: "GET", url: "/internal/metrics" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/internal/metrics",
+      headers: AUTH,
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Array.isArray(body.counters)).toBe(true);
@@ -31,9 +57,13 @@ describe("internal metrics", () => {
   });
 
   it("renders prometheus text format", async () => {
-    const app = await makeApp();
+    const app = await internalApp();
     await app.inject({ method: "GET", url: "/health" });
-    const res = await app.inject({ method: "GET", url: "/internal/metrics?format=prometheus" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/internal/metrics?format=prometheus",
+      headers: AUTH,
+    });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/plain");
     expect(res.body).toContain('requests_total{operation="/health"');
@@ -79,7 +109,7 @@ describeIfDb("internal status", () => {
 describeIfDb("ingest outcome logging", () => {
   it("records observations_total by outcome", async () => {
     await truncateAll();
-    const app = await makeApp();
+    const app = await internalApp();
     const obs = amazonObservation();
     const res = await app.inject({
       method: "POST",
@@ -90,9 +120,13 @@ describeIfDb("ingest outcome logging", () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().status).toBe("ACCEPTED");
 
-    const metrics = await app.inject({ method: "GET", url: "/internal/metrics" });
+    const metricsRes = await app.inject({
+      method: "GET",
+      url: "/internal/metrics",
+      headers: AUTH,
+    });
     expect(
-      metrics
+      metricsRes
         .json()
         .counters.some(
           (c: { name: string; labels: { outcome?: string } }) =>

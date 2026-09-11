@@ -59,6 +59,10 @@ async function main() {
   const config = loadConfig({
     DATABASE_URL: process.env.DATABASE_URL!,
     NODE_ENV: "test",
+    // LOG_LEVEL=info → the onResponse access log runs per request, matching
+    // production overhead. Requests each carry a unique remoteAddress so the
+    // real (enabled) per-IP rate limiter never dominates the numbers.
+    LOG_LEVEL: process.env.LOG_LEVEL ?? "silent",
   });
   const app = await buildApp({ prisma, config });
 

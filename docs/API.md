@@ -149,7 +149,9 @@ DataSource key) and the daily-median series used by scoring.
 
 ## `GET /internal/metrics`
 
-Process-local counters, no auth (localhost/ops use only). JSON:
+Requires `Authorization: Bearer <INTERNAL_API_TOKEN>` like `/internal/status`
+(404 when the token is unset or wrong). Both `/internal/*` routes sit in the
+health rate-limit class (600/min per IP). Process-local counters. JSON:
 `{ counters: [{ name, labels, count }], durations: [{ operation, count, p50,
 p95, max }] }`. `?format=prometheus` renders the same counters and duration
 quantiles in Prometheus text exposition format. Counters:

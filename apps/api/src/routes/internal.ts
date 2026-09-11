@@ -19,7 +19,19 @@ export function registerInternalRoutes(
   prisma: Parameters<typeof getOpsStatus>[0],
   config: AppConfig,
 ) {
-  app.get("/internal/metrics", async (request, reply) => {
+  const opts = {
+    config: {
+      rateLimit: {
+        max: config.RATE_LIMIT_HEALTH_PER_MINUTE,
+        timeWindow: "1 minute",
+      },
+    },
+  };
+
+  app.get("/internal/metrics", opts, async (request, reply) => {
+    if (!config.INTERNAL_API_TOKEN) return reply.code(404).send({ error: "not_found" });
+    if (!authorized(request.headers.authorization, config.INTERNAL_API_TOKEN))
+      return reply.code(404).send({ error: "not_found" });
     if (request.query && (request.query as { format?: string }).format === "prometheus") {
       return reply
         .header("content-type", "text/plain; version=0.0.4")
@@ -28,7 +40,7 @@ export function registerInternalRoutes(
     return app.metrics.snapshot();
   });
 
-  app.get("/internal/status", async (request, reply) => {
+  app.get("/internal/status", opts, async (request, reply) => {
     if (!config.INTERNAL_API_TOKEN) return reply.code(404).send({ error: "not_found" });
     if (!authorized(request.headers.authorization, config.INTERNAL_API_TOKEN))
       return reply.code(404).send({ error: "not_found" });
