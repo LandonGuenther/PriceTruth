@@ -6,12 +6,15 @@ description: Restore and test the PriceTruth Chrome extension, Fastify API, DEV 
 # PriceTruth runtime E2E
 
 ## Devin Secrets Needed
+
 - Root `.env` with DEV `DATABASE_URL`; load without printing.
 - No retailer account is required for public PDP testing. Optional
   `BESTBUY_API_KEY` enables enrichment; absence should report enrichment disabled.
 
 ## Restore local services
+
 From the repository root:
+
 1. Load `.env` with `set -a; source .env; set +a`.
 2. Parse `DATABASE_URL` and verify its database pathname is `/pricetruth`.
    Never use `pricetruth_load` for this workflow.
@@ -28,6 +31,7 @@ Initial PDP navigation automatically ingests; record baseline counts before
 navigating, and disclose any ingestion during access setup.
 
 ## Retailer evidence
+
 - Use current canonical PDP links, preserving query parameters. A Best Buy
   path without its marketplace query may fail while the canonical search result
   loads. SKU 10129617 previously worked with `?loc=marketplace`.
@@ -42,6 +46,7 @@ navigating, and disclose any ingestion during access setup.
 - Do not claim variant-positive coverage without an actually visible price.
 
 ## Persistence and operations
+
 - Join `PriceObservation`, `Listing`, `DataSource` (source field is `key`),
   `ObservationStatusEvent`, and `IdentifierAssertion`.
 - Verify statuses/events independently of HTTP `accepted:true`: that response
@@ -56,7 +61,7 @@ navigating, and disclose any ingestion during access setup.
 - Run `pnpm --filter @pricetruth/api jobs rollup`; compare accepted-only daily
   count/min/max/median/first/last against known test observations.
 - Run `pnpm --filter @pricetruth/api jobs archive --dir <temporary-dir>
-  --max-batches 1`; verify readable Parquet with installed `@dsnp/parquetjs`,
+--max-batches 1`; verify readable Parquet with installed `@dsnp/parquetjs`,
   manifest counts/ID bounds and SHA256. Raw archive includes quarantined facts
   but deliberately omits mutable status.
 - Test request limits last. A 70 KiB JSON body should yield 413. A fresh
