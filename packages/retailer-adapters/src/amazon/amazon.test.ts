@@ -129,6 +129,15 @@ describe("extract", () => {
     expect(r.observation.priceCents).toBe(29900);
   });
 
+  it("variant page: child ASIN in #dp is still self", () => {
+    const doc = loadFixture("variant-child-asin.html");
+    const r = amazonAdapter.extract(doc, productUrl("B0PARENT01"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(5900);
+    expect(r.observation.externalId).toBe("B0PARENT01");
+  });
+
   it("extractExternalId falls back to DOM when URL has no id", () => {
     const doc = loadFixture("sale-with-list-price.html");
     expect(amazonAdapter.extractExternalId(new URL("https://www.amazon.com/x"), doc)).toBe(

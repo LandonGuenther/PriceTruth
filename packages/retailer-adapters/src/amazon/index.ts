@@ -31,22 +31,41 @@ function extractAsinFromDoc(doc: Document): string | null {
 }
 
 /**
+ * Every ASIN the page may legitimately use for its own product: the URL id
+ * plus input#ASIN and #dp[data-asin] — on variant pages the selected child
+ * ASIN differs from the URL's parent ASIN and both are "self".
+ */
+function selfAsins(doc: Document, externalId: string): Set<string> {
+  const set = new Set<string>([externalId]);
+  const input = doc.querySelector<HTMLInputElement>(S.asinInput)?.value?.trim();
+  if (input && /^[A-Z0-9]{10}$/.test(input)) set.add(input);
+  const dp = doc.querySelector(S.dpDataAsin)?.getAttribute("data-asin")?.trim();
+  if (dp && /^[A-Z0-9]{10}$/.test(dp)) set.add(dp);
+  return set;
+}
+
+/**
  * A price element inside a subtree marked data-asin=<different ASIN> belongs
  * to a cross-sell/carousel product, not the page's product — reject it.
  */
-function foreignAsin(el: Element, externalId: string, warnings: string[]): boolean {
+function foreignAsin(el: Element, selfAsins: Set<string>, warnings: string[]): boolean {
   const asin = el.closest("[data-asin]")?.getAttribute("data-asin")?.trim();
-  if (asin && asin !== externalId) {
+  if (asin && !selfAsins.has(asin)) {
     warnings.push(`price element belongs to another ASIN (${asin}); ignored`);
     return true;
   }
   return false;
 }
 
-function extractPrice(doc: Document, warnings: string[], externalId: string): number | null {
+function extractPrice(
+  doc: Document,
+  warnings: string[],
+  externalId: string,
+  self: Set<string>,
+): number | null {
   for (const sel of S.price) {
     for (const el of doc.querySelectorAll(sel)) {
-      if (foreignAsin(el, externalId, warnings)) continue;
+      if (foreignAsin(el, self, warnings)) continue;
       const cents = parsePriceToCents(text(el));
       if (cents !== null) return cents;
     }
@@ -57,7 +76,7 @@ function extractPrice(doc: Document, warnings: string[], externalId: string): nu
     const box = doc.querySelector(boxSel);
     if (!box) continue;
     for (const el of box.querySelectorAll(S.priceWhole)) {
-      if (foreignAsin(el, externalId, warnings)) continue;
+      if (foreignAsin(el, self, warnings)) continue;
       const whole = text(el).replace(/[^0-9]/g, "");
       if (!whole) continue;
       const fraction = text(
@@ -75,10 +94,10 @@ function extractPrice(doc: Document, warnings: string[], externalId: string): nu
   return null;
 }
 
-function extractReference(doc: Document, warnings: string[], externalId: string): number | null {
+function extractReference(doc: Document, warnings: string[], self: Set<string>): number | null {
   for (const sel of S.reference) {
     for (const el of doc.querySelectorAll(sel)) {
-      if (foreignAsin(el, externalId, warnings)) continue;
+      if (foreignAsin(el, self, warnings)) continue;
       const cents = parsePriceToCents(text(el));
       if (cents !== null) return cents;
     }
@@ -153,12 +172,13 @@ export const amazonAdapter: RetailerAdapter = {
       return { ok: false, reason: "no_identifier", warnings };
     }
 
-    const priceCents = extractPrice(doc, warnings, externalId);
+    const self = selfAsins(doc, externalId);
+    const priceCents = extractPrice(doc, warnings, externalId, self);
     if (priceCents === null) {
       return { ok: false, reason: "no_price", warnings };
     }
 
-    let referencePriceCents = extractReference(doc, warnings, externalId) ?? undefined;
+    let referencePriceCents = extractReference(doc, warnings, self) ?? undefined;
     if (referencePriceCents !== undefined && referencePriceCents <= priceCents) {
       warnings.push("reference price not above price; dropped");
       referencePriceCents = undefined;
