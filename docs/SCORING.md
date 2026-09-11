@@ -5,9 +5,11 @@ Two scores are computed independently and are never merged.
 
 ## Inputs
 
-- `observations`: **eligible** `PriceObservation`s for one listing — `synthetic
-= false`, `status = 'ACCEPTED'`, and `priceType ∈ {STANDARD, SALE}`
-  (`ELIGIBLE_PRICE_TYPES`). Each carries `priceCents`, optional
+- `observations`: **eligible** `PriceObservation`s for one listing —
+  eligibility is defined solely by `packages/scoring/src/eligibility.ts`:
+  `synthetic = false`, `status ∈ ELIGIBLE_STATUSES` (`ACCEPTED`,
+  `CORROBORATED`), `priceType ∈ ELIGIBLE_PRICE_TYPES` (`STANDARD`, `SALE`).
+  See docs/DATA_QUALITY.md for how statuses are assigned. Each carries `priceCents`, optional
   `referencePriceCents`, `effectiveAt` (ISO; the server-authoritative time per
   ADR-004), and `sourceKey` (the `DataSource.key`).
 - `asOf`: the timestamp the analysis is computed for (defaults to the newest

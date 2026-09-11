@@ -4,7 +4,9 @@ Base URL: `http://127.0.0.1:3000` (configurable via `PORT`/`HOST`).
 
 All bodies are JSON. Validation and business errors return
 `{ "error": string, "message": string }` with no stack traces. Unknown routes
-return 404 `{ "error": "not_found" }`.
+return 404 `{ "error": "not_found" }`. Any 5xx returns
+`{ "error": "internal_error", "message": "Internal error" }` — internals are
+never leaked.
 
 CORS allows `chrome-extension://*` origins (the extension calls the API from a
 service worker) plus anything in `CORS_ORIGINS`. The write endpoint is protected
@@ -25,6 +27,14 @@ Required since the data-foundation migration: `schemaVersion: 1`, `priceType`;
 `referenceType` is required iff `referencePriceCents` is present;
 `extractorVersion` is optional. `observedAt` is the client-reported time — the
 server stores it as `clientObservedAt` and applies the time policy in ADR-004.
+
+Field bounds (400 `invalid_observation` on violation): `title` ≤1000 chars,
+`brand`/`modelNumber` ≤200, `url` ≤2048, `source` ≤100, `extractorVersion` ≤32,
+`externalId` ≤64 and must match the retailer's format (amazon `^[A-Z0-9]{10}$`,
+bestbuy `^\d{1,12}$`); `url` hostname must belong to the retailer;
+`gtin` = 8–14 digits; `priceCents`/`referencePriceCents` ≤ Int32 max and
+`referencePriceCents` must exceed `priceCents`; `variant` ≤20 keys (key ≤64,
+value ≤200 chars). Request bodies are limited to 64 KB.
 Headers: `x-pricetruth-client-version` (stored on the row). The User-Agent is
 never stored.
 
@@ -79,9 +89,11 @@ observation from the official Products API may be recorded;
 404 `{ "error": "listing_not_found" }` for unknown listings. Otherwise returns
 `AnalysisResponse` (shared type): current price, typical price + window, full
 `HistoricalStats`, confidence, Discount Integrity and Deal Score, computed at
-request time over eligible observations (`synthetic = false`, `status =
-'ACCEPTED'`, `priceType ∈ {STANDARD, SALE}`). The top-level timestamp is
-`effectiveAt` (previously `observedAt`).
+request time over eligible observations (`synthetic = false`, `status ∈
+{ACCEPTED, CORROBORATED}`, `priceType ∈ {STANDARD, SALE}` — see
+docs/DATA_QUALITY.md). The top-level timestamp is `effectiveAt` (previously
+`observedAt`). An `evidence` block reports `eligibleCount` plus per-reason
+excluded counts (`synthetic`, `quarantined`, `excluded`, `priceType`).
 
 ## `GET /v1/listings/:retailer/:externalId/history?days=180`
 

@@ -12,6 +12,7 @@ import {
   type ReferencePriceType,
   type RetailerObservation,
 } from "@pricetruth/shared";
+import { ELIGIBLE_PRICE_TYPES, ELIGIBLE_STATUSES } from "@pricetruth/scoring";
 import type { AppConfig } from "../config.js";
 import { fetchBestBuyProduct, type FetchLike } from "./bestbuyApi.js";
 import {
@@ -20,9 +21,15 @@ import {
   reevaluateListing,
   upsertAssertions,
 } from "./catalogService.js";
+import { ANOMALY_ENGINE_VERSION, evaluateAnomaly } from "./dataQuality/anomaly.js";
+import { corroborateListing } from "./dataQuality/corroboration.js";
 import { resolveObservationTime } from "./timePolicy.js";
 
 const DEDUP_WINDOW_MS = 60 * 60 * 1000;
+const ANOMALY_WINDOW_MS = 30 * 86_400_000;
+const ANOMALY_CONTEXT_LIMIT = 20;
+const INGEST_ACTOR = "system:ingest";
+const ANOMALY_ACTOR = `system:anomaly@${ANOMALY_ENGINE_VERSION}`;
 
 // Type-level proof that the shared literals and the Prisma enums are identical.
 const priceTypeMap = {
@@ -193,29 +200,68 @@ async function insertObservation(
   listingId: string,
   fields: ObservationFields,
   meta: { clientVersion: string | null },
+  initial: { status: "ACCEPTED" | "QUARANTINED"; actor: string; reason: string } = {
+    status: "ACCEPTED",
+    actor: INGEST_ACTOR,
+    reason: "accepted",
+  },
 ) {
-  return prisma.priceObservation.create({
-    data: {
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.priceObservation.create({
+      data: {
+        listingId,
+        variantId: fields.variantId,
+        dataSourceId: fields.dataSourceId,
+        priceCents: fields.priceCents,
+        priceType: priceTypeMap[fields.priceType],
+        referencePriceCents: fields.referencePriceCents,
+        referenceType:
+          fields.referenceType === null ? null : referenceTypeMap[fields.referenceType],
+        currency: fields.currency,
+        inStock: fields.inStock,
+        receivedAt: fields.receivedAt,
+        clientObservedAt: fields.clientObservedAt,
+        effectiveAt: fields.effectiveAt,
+        clientSkewSeconds: fields.clientSkewSeconds,
+        status: initial.status,
+        synthetic: fields.synthetic,
+        schemaVersion: fields.schemaVersion,
+        clientVersion: meta.clientVersion,
+        extractorVersion: fields.extractorVersion,
+      },
+      select: { id: true },
+    });
+    // Every insert is audited: RECEIVED is transient and only ever appears as
+    // fromStatus on this first event.
+    await tx.observationStatusEvent.create({
+      data: {
+        observationId: created.id,
+        fromStatus: "RECEIVED",
+        toStatus: initial.status,
+        reason: initial.reason,
+        actor: initial.actor,
+      },
+    });
+    return created;
+  });
+}
+
+/** Recent eligible context rows for the anomaly engine (newest first). */
+async function anomalyContext(prisma: PrismaClient, listingId: string, effectiveAt: Date) {
+  return prisma.priceObservation.findMany({
+    where: {
       listingId,
-      variantId: fields.variantId,
-      dataSourceId: fields.dataSourceId,
-      priceCents: fields.priceCents,
-      priceType: priceTypeMap[fields.priceType],
-      referencePriceCents: fields.referencePriceCents,
-      referenceType: fields.referenceType === null ? null : referenceTypeMap[fields.referenceType],
-      currency: fields.currency,
-      inStock: fields.inStock,
-      receivedAt: fields.receivedAt,
-      clientObservedAt: fields.clientObservedAt,
-      effectiveAt: fields.effectiveAt,
-      clientSkewSeconds: fields.clientSkewSeconds,
-      status: "ACCEPTED",
-      synthetic: fields.synthetic,
-      schemaVersion: fields.schemaVersion,
-      clientVersion: meta.clientVersion,
-      extractorVersion: fields.extractorVersion,
+      synthetic: false,
+      status: { in: [...ELIGIBLE_STATUSES] },
+      priceType: { in: [...ELIGIBLE_PRICE_TYPES] },
+      effectiveAt: {
+        gte: new Date(effectiveAt.getTime() - ANOMALY_WINDOW_MS),
+        lt: effectiveAt,
+      },
     },
-    select: { id: true },
+    orderBy: { effectiveAt: "desc" },
+    take: ANOMALY_CONTEXT_LIMIT,
+    select: { priceCents: true, currency: true, effectiveAt: true },
   });
 }
 
@@ -278,11 +324,36 @@ export async function ingestObservation(
     observationId = existing.id;
     accepted = false;
   } else {
-    observationId = (await insertObservation(prisma, listing.id, fields, meta)).id;
+    // Anomaly check runs against recent eligible history; quarantined rows are
+    // still inserted (never dropped) with the reasons on the status event.
+    const context = await anomalyContext(prisma, listing.id, effectiveAt);
+    const verdict = evaluateAnomaly(
+      {
+        priceCents: fields.priceCents,
+        currency: fields.currency,
+        trustClass: dataSource.trustClass,
+        effectiveAt,
+      },
+      context,
+    );
+    const created = await insertObservation(
+      prisma,
+      listing.id,
+      fields,
+      meta,
+      verdict.verdict === "QUARANTINE"
+        ? { status: "QUARANTINED", actor: ANOMALY_ACTOR, reason: verdict.reasons.join(",") }
+        : { status: "ACCEPTED", actor: INGEST_ACTOR, reason: "accepted" },
+    );
+    observationId = created.id;
     accepted = true;
   }
 
   const enrichment = await maybeEnrichBestBuy(prisma, config, listing.id, obs, fetchImpl);
+
+  // Corroboration pass for the listing: QUARANTINED self-heals once a second
+  // day/source agrees; idempotent, cheap, no queue.
+  await corroborateListing(prisma, listing.id, new Date());
 
   return {
     accepted,
@@ -370,6 +441,7 @@ export async function setObservationStatus(
   observationId: bigint,
   toStatus: ObservationStatus,
   reason: string,
+  actor: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const current = await tx.priceObservation.findUniqueOrThrow({
@@ -382,7 +454,7 @@ export async function setObservationStatus(
       data: { status: toStatus },
     });
     await tx.observationStatusEvent.create({
-      data: { observationId, fromStatus: current.status, toStatus, reason },
+      data: { observationId, fromStatus: current.status, toStatus, reason, actor },
     });
   });
 }

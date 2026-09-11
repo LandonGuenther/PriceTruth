@@ -17,7 +17,7 @@ export function listingRoutes(app: FastifyInstance): void {
     if (!listing) {
       return reply.status(404).send({ error: "listing_not_found", message: "Unknown listing" });
     }
-    return analyzeListingRow(listing);
+    return analyzeListingRow(app.prisma, listing);
   });
 
   app.get("/v1/listings/:retailer/:externalId/history", async (request, reply) => {

@@ -24,7 +24,7 @@ export interface BuildAppOptions {
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 64 * 1024 });
 
   app.decorate("prisma", opts.prisma);
   app.decorate("config", opts.config);
@@ -62,9 +62,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     const status = error.statusCode ?? 500;
     app.log.error(error);
-    return reply
-      .status(status)
-      .send({ error: status >= 500 ? "internal_error" : "request_error", message: error.message });
+    if (status >= 500) {
+      // Never leak internals in a 5xx body.
+      return reply.status(500).send({ error: "internal_error", message: "Internal error" });
+    }
+    return reply.status(status).send({ error: "request_error", message: error.message });
   });
 
   healthRoutes(app);

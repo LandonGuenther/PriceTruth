@@ -55,6 +55,11 @@ export interface AnalysisResponse {
   confidence: ConfidenceResult;
   discountIntegrity: DiscountIntegrityResult;
   dealScore: ScoreResult;
+  /** How many stored observations fed analysis vs were filtered out. */
+  evidence: {
+    eligibleCount: number;
+    excluded: { synthetic: number; quarantined: number; excluded: number; priceType: number };
+  };
   computedAt: string;
 }
 

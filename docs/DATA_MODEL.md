@@ -52,10 +52,11 @@ Postgres via Prisma (`apps/api/prisma/schema.prisma`). Migrations under
     `clientSkewSeconds?`;
   - provenance: `schemaVersion` (≥1), `clientVersion?`, `extractorVersion?`,
     `synthetic` (default `false`);
-  - lifecycle: `status` (`ACCEPTED`/`QUARANTINED`/`EXCLUDED`) — the only
-    mutable column.
+  - lifecycle: `status` (`RECEIVED`/`ACCEPTED`/`CORROBORATED`/`QUARANTINED`/
+    `EXCLUDED`) — the only mutable column. `RECEIVED` is transient: it exists
+    only as `fromStatus` on the first status event (see docs/DATA_QUALITY.md).
 - **ObservationStatusEvent** — append-only log of `status` transitions
-  (`observationId`, `fromStatus`, `toStatus`, `reason`, `createdAt`).
+  (`observationId`, `fromStatus`, `toStatus`, `reason`, `actor`, `createdAt`).
 
 ## Integrity constraints
 

@@ -101,7 +101,9 @@ enum ReferencePriceType {
 }
 
 enum ObservationStatus {
+  RECEIVED
   ACCEPTED
+  CORROBORATED
   QUARANTINED
   EXCLUDED
 }
@@ -223,6 +225,7 @@ model ObservationStatusEvent {
   fromStatus    ObservationStatus
   toStatus      ObservationStatus
   reason        String
+  actor         String            @db.VarChar(120)
   createdAt     DateTime          @default(now())
 
   @@index([observationId])

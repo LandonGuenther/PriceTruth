@@ -11,6 +11,7 @@ import {
   truncateAll,
 } from "./helpers.js";
 import { setObservationStatus } from "../src/services/observationService.js";
+import { corroborateListing } from "../src/services/dataQuality/corroboration.js";
 import { linkListing, unlinkListing } from "../src/services/catalogService.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
 
@@ -183,6 +184,18 @@ describeIfDb("api integration", () => {
       amazonObservation({ source: "mystery:source" }),
       amazonObservation({ referenceType: undefined }),
       { ...amazonObservation(), referencePriceCents: undefined, referenceType: "UNKNOWN" },
+      // M3 validation hardening
+      amazonObservation({ title: "x".repeat(1001) }),
+      amazonObservation({ externalId: "SHORT" }), // amazon requires ^[A-Z0-9]{10}$
+      amazonObservation({ url: "https://www.bestbuy.com/p/6447382" }), // wrong host
+      amazonObservation({ url: "https://evil-amazon.com/dp/B0TESTASIN" }), // suffix trick
+      amazonObservation({ referencePriceCents: 29900 }), // reference must exceed price
+      amazonObservation({ referencePriceCents: 20000 }),
+      amazonObservation({ priceCents: 2_147_483_648 }), // Int32 bound
+      amazonObservation({ gtin: "12x4" }),
+      amazonObservation({
+        variant: Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, "v"])),
+      }),
     ];
     for (const payload of cases) {
       const res = await app.inject({ method: "POST", url: "/v1/observations", payload });
@@ -209,6 +222,24 @@ describeIfDb("api integration", () => {
     });
     expect(missing.statusCode).toBe(400);
     expect(missing.json().error).toBe("invalid_observation");
+    await app.close();
+  });
+
+  it("5xx responses are sanitized and payloads over 64KB are rejected", async () => {
+    const app = await makeApp();
+    app.get("/boom", () => {
+      throw new Error("secret connection string details");
+    });
+    const boom = await app.inject({ method: "GET", url: "/boom" });
+    expect(boom.statusCode).toBe(500);
+    expect(boom.json()).toEqual({ error: "internal_error", message: "Internal error" });
+
+    const huge = await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ title: "x".repeat(70 * 1024) }),
+    });
+    expect(huge.statusCode).toBe(413);
     await app.close();
   });
 
@@ -276,7 +307,7 @@ describeIfDb("api integration", () => {
         dataSource: { key: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT },
       },
     });
-    await setObservationStatus(prisma, extObs.id, "EXCLUDED", "test setup");
+    await setObservationStatus(prisma, extObs.id, "EXCLUDED", "test setup", "cli:tester");
 
     const res = await app.inject({
       method: "GET",
@@ -546,15 +577,21 @@ describeIfDb("api integration", () => {
     const newest = await prisma.priceObservation.findFirstOrThrow({
       orderBy: { id: "desc" },
     });
-    await setObservationStatus(prisma, newest.id, "QUARANTINED", "suspicious row");
+    await setObservationStatus(prisma, newest.id, "QUARANTINED", "suspicious row", "cli:tester");
 
     const events = await prisma.observationStatusEvent.findMany({
       where: { observationId: newest.id },
+      orderBy: { id: "asc" },
     });
-    expect(events).toHaveLength(1);
-    expect(events[0]!.fromStatus).toBe("ACCEPTED");
-    expect(events[0]!.toStatus).toBe("QUARANTINED");
-    expect(events[0]!.reason).toBe("suspicious row");
+    expect(events).toHaveLength(2);
+    // insert audit: transient RECEIVED → ACCEPTED
+    expect(events[0]!.fromStatus).toBe("RECEIVED");
+    expect(events[0]!.toStatus).toBe("ACCEPTED");
+    expect(events[0]!.actor).toBe("system:ingest");
+    expect(events[1]!.fromStatus).toBe("ACCEPTED");
+    expect(events[1]!.toStatus).toBe("QUARANTINED");
+    expect(events[1]!.reason).toBe("suspicious row");
+    expect(events[1]!.actor).toBe("cli:tester");
     // status change leaves the fact columns untouched
     expect(newest.priceCents).toBe(29800);
 
@@ -640,7 +677,7 @@ describeIfDb("api integration", () => {
 
   // ---- catalog identity (M2) -------------------------------------------------
 
-  const GTIN_A = "0012345678905"; // valid 13-digit, normalizes to 00012345678905
+  // GTIN_A is the default gtin on amazonObservation ("0012345678905" → 00012345678905)
   const GTIN_B = "036000291452"; // valid UPC-A, normalizes to 00036000291452
 
   const listingOf = async (retailerId: string, externalId: string) =>
@@ -690,14 +727,14 @@ describeIfDb("api integration", () => {
       method: "POST",
       url: "/v1/observations",
       payload: amazonObservation({
-        externalId: "B0OTHERASIN",
-        url: "https://www.amazon.com/dp/B0OTHERASIN",
+        externalId: "B0OTHERXX1",
+        url: "https://www.amazon.com/dp/B0OTHERXX1",
         gtin: GTIN_B,
         modelNumber: "OTHER-9",
       }),
     });
     const l1 = await listingOf("amazon", "B0TESTASIN");
-    const l2 = await listingOf("amazon", "B0OTHERASIN");
+    const l2 = await listingOf("amazon", "B0OTHERXX1");
     expect(l2.productId).not.toBe(l1.productId);
     const ev = await prisma.matchEvidence.findMany({ where: { listingId: l2.id } });
     expect(ev).toHaveLength(1);
@@ -731,14 +768,14 @@ describeIfDb("api integration", () => {
       method: "POST",
       url: "/v1/observations",
       payload: amazonObservation({
-        externalId: "B0CONFLICT0",
-        url: "https://www.amazon.com/dp/B0CONFLICT0",
+        externalId: "B0CONFLCT0",
+        url: "https://www.amazon.com/dp/B0CONFLCT0",
         brand: "Sony",
         modelNumber: "WH-1000XM6",
         title: "Sony Headphones",
       }),
     });
-    const c = await listingOf("amazon", "B0CONFLICT0");
+    const c = await listingOf("amazon", "B0CONFLCT0");
     expect(c.productId).not.toBe(a.productId);
     expect(c.productId).not.toBe(b.productId);
     const ev = await prisma.matchEvidence.findMany({ where: { listingId: c.id } });
@@ -845,10 +882,165 @@ describeIfDb("api integration", () => {
       where: { id: listing.productId! },
       include: { identifiers: true },
     });
-    expect(product.identifiers.map((i) => i.type).sort()).toEqual([
-      "ASIN",
-      "MANUFACTURER_MODEL",
-    ]);
+    expect(product.identifiers.map((i) => i.type).sort()).toEqual(["ASIN", "MANUFACTURER_MODEL"]);
+    await app.close();
+  });
+
+  const postN = async (app: Awaited<ReturnType<typeof makeApp>>, n: number, cents: number) => {
+    for (let i = 0; i < n; i++) {
+      await app.inject({
+        method: "POST",
+        url: "/v1/observations",
+        payload: amazonObservation({
+          priceCents: cents + i * 10,
+          referencePriceCents: undefined,
+          referenceType: undefined,
+        }),
+      });
+    }
+  };
+
+  it("QUARANTINED self-heals to CORROBORATED via a second source; EXCLUDED untouched", async () => {
+    const app = await makeApp();
+    // 5 tightly clustered rows at ~$999
+    await postN(app, 5, 99900);
+    // The suspicious $599 drop: >25% off a tight cluster → QUARANTINED
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    const quarantined = await prisma.priceObservation.findFirstOrThrow({
+      where: { priceCents: 59900 },
+    });
+    expect(quarantined.status).toBe("QUARANTINED");
+    const events = await prisma.observationStatusEvent.findMany({
+      where: { observationId: quarantined.id },
+    });
+    expect(events[0]!.fromStatus).toBe("RECEIVED");
+    expect(events[0]!.toStatus).toBe("QUARANTINED");
+    expect(events[0]!.actor).toContain("system:anomaly@");
+    expect(events[0]!.reason).toContain("contradicts_recent_cluster");
+
+    const listing = await prisma.listing.findFirstOrThrow();
+    // EXCLUDED rows are never touched by corroboration
+    await setObservationStatus(prisma, quarantined.id, "EXCLUDED", "op decision", "cli:tester");
+    await corroborateListing(prisma, listing.id, new Date());
+    expect(
+      (await prisma.priceObservation.findUniqueOrThrow({ where: { id: quarantined.id } })).status,
+    ).toBe("EXCLUDED");
+    await setObservationStatus(prisma, quarantined.id, "QUARANTINED", "restore", "cli:tester");
+
+    // A second $599 from a different DataSource corroborates it.
+    await prisma.priceObservation.create({
+      data: {
+        listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.MANUAL),
+        priceCents: 59900,
+        priceType: "STANDARD",
+        currency: "USD",
+        effectiveAt: new Date(),
+        schemaVersion: 1,
+        synthetic: false,
+      },
+    });
+    // any ingest re-runs the corroboration pass (a duplicate still triggers it)
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    expect(
+      (await prisma.priceObservation.findUniqueOrThrow({ where: { id: quarantined.id } })).status,
+    ).toBe("CORROBORATED");
+    const manual = await prisma.priceObservation.findFirstOrThrow({
+      where: { dataSource: { key: OBSERVATION_SOURCES.MANUAL } },
+    });
+    expect(manual.status).toBe("CORROBORATED");
+
+    // analysis now includes the corroborated $599 rows
+    const analysis = (
+      await app.inject({ method: "GET", url: "/v1/listings/amazon/B0TESTASIN/analysis" })
+    ).json();
+    expect(analysis.currentPriceCents).toBe(59900);
+    // 5 cluster rows (ACCEPTED) + client 599 + manual 599 (CORROBORATED)
+    expect(analysis.evidence.eligibleCount).toBe(7);
+    await app.close();
+  });
+
+  it("quarantined rows are stored but excluded from history/analysis; evidence summarizes", async () => {
+    const app = await makeApp();
+    await postN(app, 5, 99900);
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    expect(await prisma.priceObservation.count()).toBe(6); // never dropped
+
+    const analysis = (
+      await app.inject({ method: "GET", url: "/v1/listings/amazon/B0TESTASIN/analysis" })
+    ).json();
+    expect(analysis.evidence).toEqual({
+      eligibleCount: 5,
+      excluded: { synthetic: 0, quarantined: 1, excluded: 0, priceType: 0 },
+    });
+    const history = (
+      await app.inject({ method: "GET", url: "/v1/listings/amazon/B0TESTASIN/history" })
+    ).json();
+    expect(history.points).toHaveLength(5);
+    expect(history.points.every((p: { priceCents: number }) => p.priceCents !== 59900)).toBe(true);
+    await app.close();
+  });
+
+  it("same-source same-day rows do not corroborate", async () => {
+    const app = await makeApp();
+    await postN(app, 5, 99900);
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({
+        priceCents: 59900,
+        referencePriceCents: undefined,
+        referenceType: undefined,
+      }),
+    });
+    const q = await prisma.priceObservation.findFirstOrThrow({
+      where: { priceCents: 59900, status: "QUARANTINED" },
+    });
+    const listing = await prisma.listing.findFirstOrThrow();
+    // second $599 from the SAME source on the same UTC day — not a corroborator
+    const sameSource = await prisma.priceObservation.create({
+      data: {
+        listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT),
+        priceCents: 59900,
+        priceType: "STANDARD",
+        currency: "USD",
+        effectiveAt: new Date(),
+        schemaVersion: 1,
+        synthetic: false,
+      },
+    });
+    await corroborateListing(prisma, listing.id, new Date());
+    expect((await prisma.priceObservation.findUniqueOrThrow({ where: { id: q.id } })).status).toBe(
+      "QUARANTINED",
+    );
+    expect(
+      (await prisma.priceObservation.findUniqueOrThrow({ where: { id: sameSource.id } })).status,
+    ).toBe("ACCEPTED");
     await app.close();
   });
 });
