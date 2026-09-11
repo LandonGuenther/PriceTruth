@@ -14,30 +14,37 @@ const apiOrigin = new URL(apiBase).origin;
 const manifest = buildManifest(pkg.version, apiOrigin);
 writeFileSync(path.join(dist, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
-// Vite emits the html input under its src-relative path; the manifest and
-// Chrome want a flat dist/sidepanel.html.
-const emittedHtml = path.join(dist, "src/sidepanel/index.html");
-const flatHtml = path.join(dist, "sidepanel.html");
-if (existsSync(emittedHtml)) {
-  renameSync(emittedHtml, flatHtml);
-  rmSync(path.join(dist, "src"), { recursive: true, force: true });
-} else if (!existsSync(flatHtml)) {
-  throw new Error("sidepanel html missing from vite output");
+/**
+ * Vite emits html inputs under their src-relative paths. Chrome wants flat
+ * files at dist/*.html. After moving, rewrite asset URLs that still point
+ * up from the old depth (`../../foo.js` → `./foo.js`).
+ */
+function flattenHtml(emittedRelative: string, flatName: string): void {
+  const emittedHtml = path.join(dist, emittedRelative);
+  const flatHtml = path.join(dist, flatName);
+  if (existsSync(emittedHtml)) {
+    renameSync(emittedHtml, flatHtml);
+  } else if (!existsSync(flatHtml)) {
+    throw new Error(`${flatName} missing from vite output (expected ${emittedRelative})`);
+  }
+
+  let html = readFileSync(flatHtml, "utf8");
+  html = html
+    .replaceAll('src="../../', 'src="./')
+    .replaceAll('href="../../', 'href="./')
+    .replaceAll('src="/', 'src="./')
+    .replaceAll('href="/', 'href="./')
+    .replaceAll(" crossorigin", "");
+  writeFileSync(flatHtml, html);
 }
 
-// After flattening from dist/src/sidepanel/index.html → dist/sidepanel.html,
-// Vite's relative `base: './'` URLs are still rooted at the old depth
-// (`../../sidepanel.js`). Rewrite them to be relative to dist/. Also convert
-// any leftover root-absolute URLs and strip `crossorigin` (breaks module
-// loads on chrome-extension:// pages).
-let html = readFileSync(flatHtml, "utf8");
-html = html
-  .replaceAll('src="../../', 'src="./')
-  .replaceAll('href="../../', 'href="./')
-  .replaceAll('src="/', 'src="./')
-  .replaceAll('href="/', 'href="./')
-  .replaceAll(" crossorigin", "");
-writeFileSync(flatHtml, html);
+flattenHtml("src/sidepanel/index.html", "sidepanel.html");
+flattenHtml("src/popup/index.html", "popup.html");
+if (existsSync(path.join(dist, "src"))) {
+  rmSync(path.join(dist, "src"), { recursive: true, force: true });
+}
 
 mkdirSync(path.join(appDir, "release"), { recursive: true });
-console.log(`Wrote dist/manifest.json (api origin ${apiOrigin}) and dist/sidepanel.html`);
+console.log(
+  `Wrote dist/manifest.json (api origin ${apiOrigin}), dist/sidepanel.html, dist/popup.html`,
+);

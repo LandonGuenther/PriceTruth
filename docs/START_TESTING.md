@@ -5,14 +5,14 @@
 | Item | Value |
 |------|-------|
 | API hostname | `https://pricetruth-api-staging.fly.dev` |
-| Beta ZIP | `apps/extension/release/pricetruth-extension-0.1.0.zip` |
-| Extension version | `0.1.0` |
+| Beta ZIP | `apps/extension/release/pricetruth-extension-0.1.1.zip` |
+| Extension version | `0.1.1` |
 | Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| ZIP SHA-256 | `44234ae83a301e7f28d34e521204a9656a8072769c577ee0107c2af9737a4cba` |
+| ZIP SHA-256 | `71704712873a03c9a4e6aeafcea3ac5a118594d5b8e0b44ff299b0561bcaa4fb` |
 
 ## Install (Chrome)
 
-1. Unzip `pricetruth-extension-0.1.0.zip`.
+1. Unzip `pricetruth-extension-0.1.1.zip`.
 2. Open `chrome://extensions`.
 3. Enable **Developer mode**.
 4. Click **Load unpacked** and select the unzipped folder (contains `manifest.json`).

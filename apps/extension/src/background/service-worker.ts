@@ -4,6 +4,15 @@ import { tabStateKey } from "../messages.js";
 import { ApiClient } from "./api.js";
 import { handleMessage, handleNavigationStart, type HandlerStorage } from "./handler.js";
 
+/**
+ * Background service worker.
+ *
+ * Toolbar click → side panel is owned by `action.default_popup` (popup.html).
+ * Do not call `setPanelBehavior({ openPanelOnActionClick: true })` while a
+ * default_popup is configured - Chrome documents that combination as
+ * unsupported, and it can make the action icon appear dead.
+ */
+
 const storage: HandlerStorage = {
   get: (key) => chrome.storage.session.get(key) as Promise<Record<string, TabState>>,
   set: (values) => chrome.storage.session.set(values),
@@ -32,26 +41,6 @@ const deps = {
   schedule: (fn: () => void, ms: number) => setTimeout(fn, ms),
   cancelSchedule: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
-
-/**
- * Open the side panel on toolbar click.
- *
- * Prefer an explicit `action.onClicked` + `sidePanel.open` path over relying
- * solely on `setPanelBehavior({ openPanelOnActionClick })`. The behavior flag
- * is async and can be lost if the MV3 service worker is killed before the
- * promise settles, which presents as: toolbar icon (blue square) click does
- * nothing. `onClicked` runs on the user gesture and opens reliably.
- *
- * Do not also enable openPanelOnActionClick - Chrome will not fire onClicked
- * when that behavior is set.
- */
-chrome.action.onClicked.addListener((tab) => {
-  if (typeof tab.windowId === "number") {
-    void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {
-      // Side panel unavailable (policy / unsupported) - nothing else to do.
-    });
-  }
-});
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender) => {
   void handleMessage(msg, sender.tab?.id, deps);
