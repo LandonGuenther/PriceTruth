@@ -209,7 +209,9 @@ export async function exportObservationBatches(
             `archive batch ${key} exists with different sha256 — refusing to overwrite`,
           );
         }
-        if (remote === null) {
+        // Crash between the two puts: parquet present, manifest missing.
+        const manifestMissing = remote !== null && !(await archive.exists(manifestKey));
+        if (remote === null || manifestMissing) {
           const manifest: BatchManifest = {
             schemaVersion: ARCHIVE_SCHEMA_VERSION,
             rowCount: group.length,
@@ -222,7 +224,7 @@ export async function exportObservationBatches(
             sha256,
             destination,
           };
-          await archive.putObject(key, bytes);
+          if (remote === null) await archive.putObject(key, bytes);
           await archive.putObject(manifestKey, Buffer.from(JSON.stringify(manifest, null, 2)));
         }
         await prisma.archiveBatch.create({

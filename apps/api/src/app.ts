@@ -124,7 +124,14 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
       return reply.status(400).send({ error: "invalid_observation", message: error.message });
     }
     const status = error.statusCode ?? 500;
-    app.log.error(error);
+    // 5xx → error; 4xx/429 → warn with code/status/message only.
+    if (status >= 500) app.log.error(error);
+    else
+      app.log.warn({
+        code: (error as FastifyError).code,
+        statusCode: status,
+        message: error.message,
+      });
     if (status === 429) {
       const retryAfterSeconds = Math.max(
         0,

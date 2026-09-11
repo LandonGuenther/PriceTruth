@@ -188,6 +188,27 @@ describeIfDb("archive job", () => {
     expect(cp.cursor).toBe(ids[ids.length - 1]);
   });
 
+  it("crash between parquet and manifest puts → rerun backfills the manifest", async () => {
+    await seedObservations([day(1)]);
+    const failing = new MemArchive();
+    failing.failOnPutCall = 2; // parquet ok, manifest put throws
+    await expect(exportObservationBatches(prisma, failing)).rejects.toThrow(
+      "simulated put failure",
+    );
+    const parquetKey = [...failing.objects.keys()][0]!;
+    expect(parquetKey.endsWith(".parquet")).toBe(true);
+    const manifestKey = `${parquetKey.slice(0, -".parquet".length)}.manifest.json`;
+
+    const rerun = new MemArchive();
+    rerun.objects.set(parquetKey, failing.objects.get(parquetKey)!);
+    await exportObservationBatches(prisma, rerun);
+    expect(rerun.objects.has(manifestKey)).toBe(true);
+    const manifest = JSON.parse(new TextDecoder().decode(rerun.objects.get(manifestKey)));
+    expect(manifest.rowCount).toBe(1);
+    expect(await prisma.archiveBatch.count()).toBe(1);
+    expect(rerun.objects.size).toBe(2);
+  });
+
   it("rerun with nothing new is a no-op", async () => {
     await seedObservations([day(1)]);
     const a = new MemArchive();
