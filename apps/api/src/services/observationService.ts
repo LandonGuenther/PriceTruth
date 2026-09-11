@@ -165,6 +165,7 @@ interface ObservationFields {
   schemaVersion: number;
   extractorVersion: string | null;
   clientObservedAt: Date | null;
+  receivedAt: Date;
   effectiveAt: Date;
   clientSkewSeconds: number | null;
   synthetic: boolean;
@@ -205,7 +206,7 @@ async function insertObservation(
       referenceType: fields.referenceType === null ? null : referenceTypeMap[fields.referenceType],
       currency: fields.currency,
       inStock: fields.inStock,
-      receivedAt: new Date(),
+      receivedAt: fields.receivedAt,
       clientObservedAt: fields.clientObservedAt,
       effectiveAt: fields.effectiveAt,
       clientSkewSeconds: fields.clientSkewSeconds,
@@ -229,6 +230,12 @@ export async function ingestObservation(
   const dataSource = await prisma.dataSource.findUnique({ where: { key: obs.source } });
   if (!dataSource) {
     throw new ObservationRejected(`unknown source: ${obs.source}`);
+  }
+  // Only untrusted-client sources may be claimed over the wire; claiming a
+  // SERVER_FETCHED/VERIFIED/TEST source would hand the client a trusted clock
+  // or let it inject synthetic rows.
+  if (dataSource.trustClass !== "CLIENT_REPORTED") {
+    throw new ObservationRejected(`source is not accepted from clients: ${obs.source}`);
   }
 
   const receivedAt = new Date();
@@ -259,6 +266,7 @@ export async function ingestObservation(
     schemaVersion: obs.schemaVersion,
     extractorVersion: obs.extractorVersion ?? null,
     clientObservedAt: new Date(obs.observedAt),
+    receivedAt,
     effectiveAt,
     clientSkewSeconds,
     synthetic: false,
@@ -339,6 +347,7 @@ async function maybeEnrichBestBuy(
       schemaVersion: 1,
       extractorVersion: null,
       clientObservedAt: now,
+      receivedAt: now,
       effectiveAt,
       clientSkewSeconds,
       synthetic: false,

@@ -92,24 +92,58 @@ describeIfDb("api integration", () => {
     await app.close();
   });
 
-  it("same price but effectiveAt 61 min later (trusted source) → new row", async () => {
+  it("same price but effectiveAt >60 min earlier → new row (not a duplicate)", async () => {
     const app = await makeApp();
-    const t0 = Date.now() - 90 * 60_000; // original observation 90 min ago
-    await app.inject({
-      method: "POST",
-      url: "/v1/observations",
-      payload: amazonObservation({
-        source: OBSERVATION_SOURCES.MANUAL,
-        observedAt: new Date(t0).toISOString(),
-      }),
+    const listing = await prisma.listing.create({
+      data: {
+        retailer: {
+          connectOrCreate: {
+            where: { id: "amazon" },
+            create: { id: "amazon", displayName: "Amazon" },
+          },
+        },
+        externalId: "B0TESTASIN",
+        url: "https://www.amazon.com/dp/B0TESTASIN",
+        title: "Test Widget",
+      },
+    });
+    await prisma.priceObservation.create({
+      data: {
+        listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.SYNTHETIC_TEST),
+        priceCents: 29900,
+        priceType: "STANDARD",
+        currency: "USD",
+        effectiveAt: new Date(Date.now() - 61 * 60_000),
+        schemaVersion: 1,
+      },
     });
     const res = await app.inject({
       method: "POST",
       url: "/v1/observations",
-      payload: amazonObservation({ source: OBSERVATION_SOURCES.MANUAL }),
+      payload: amazonObservation(),
     });
     expect(res.statusCode).toBe(201);
     expect(await prisma.priceObservation.count()).toBe(2);
+    await app.close();
+  });
+
+  it("clients may not claim non-CLIENT_REPORTED sources", async () => {
+    const app = await makeApp();
+    for (const source of [
+      OBSERVATION_SOURCES.BESTBUY_API,
+      OBSERVATION_SOURCES.MANUAL,
+      OBSERVATION_SOURCES.SYNTHETIC_TEST,
+    ]) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/observations",
+        payload: amazonObservation({ source }),
+      });
+      expect(res.statusCode, source).toBe(400);
+      expect(res.json().error).toBe("invalid_observation");
+    }
+    expect(await prisma.priceObservation.count()).toBe(0);
     await app.close();
   });
 
@@ -124,6 +158,8 @@ describeIfDb("api integration", () => {
     expect(res.statusCode).toBe(201);
     const obs = await prisma.priceObservation.findFirstOrThrow();
     expect(Math.abs(obs.effectiveAt.getTime() - Date.now())).toBeLessThan(5000);
+    // effectiveAt is exactly the same timestamp stored as receivedAt
+    expect(obs.effectiveAt.getTime()).toBe(obs.receivedAt.getTime());
     expect(obs.clientObservedAt?.toISOString()).toBe(clientTime.toISOString());
     expect(obs.clientSkewSeconds).toBe(
       Math.round((clientTime.getTime() - obs.receivedAt.getTime()) / 1000),
