@@ -3,12 +3,14 @@ import { OBSERVATION_SOURCES } from "@pricetruth/shared";
 import { analyzeListing } from "@pricetruth/scoring";
 import {
   amazonObservation,
+  dataSourceId,
   describeIfDb,
   makeApp,
   prisma,
   testConfig,
   truncateAll,
 } from "./helpers.js";
+import { setObservationStatus } from "../src/services/observationService.js";
 import type { FetchLike } from "../src/services/bestbuyApi.js";
 
 describeIfDb("api integration", () => {
@@ -51,10 +53,18 @@ describeIfDb("api integration", () => {
     const idTypes = listing!.product!.identifiers.map((i) => i.type).sort();
     expect(idTypes).toEqual(["ASIN", "GTIN"]);
 
-    const obs = await prisma.priceObservation.findFirst({ where: { listingId: listing!.id } });
+    const obs = await prisma.priceObservation.findFirst({
+      where: { listingId: listing!.id },
+      include: { dataSource: true },
+    });
     expect(obs!.clientVersion).toBe("0.1.0");
-    expect(obs!.userAgentHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(obs!.extractorVersion).toBe("1.0.0");
+    expect(obs!.schemaVersion).toBe(1);
+    expect(obs!.priceType).toBe("STANDARD");
+    expect(obs!.referenceType).toBe("UNKNOWN");
+    expect(obs!.status).toBe("ACCEPTED");
     expect(obs!.synthetic).toBe(false);
+    expect(obs!.dataSource.key).toBe(OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT);
     await app.close();
   });
 
@@ -82,21 +92,42 @@ describeIfDb("api integration", () => {
     await app.close();
   });
 
-  it("same price but observedAt 61 min later → new row", async () => {
+  it("same price but effectiveAt 61 min later (trusted source) → new row", async () => {
     const app = await makeApp();
     const t0 = Date.now() - 90 * 60_000; // original observation 90 min ago
     await app.inject({
       method: "POST",
       url: "/v1/observations",
-      payload: amazonObservation({ observedAt: new Date(t0).toISOString() }),
+      payload: amazonObservation({
+        source: OBSERVATION_SOURCES.MANUAL,
+        observedAt: new Date(t0).toISOString(),
+      }),
     });
     const res = await app.inject({
       method: "POST",
       url: "/v1/observations",
-      payload: amazonObservation(),
+      payload: amazonObservation({ source: OBSERVATION_SOURCES.MANUAL }),
     });
     expect(res.statusCode).toBe(201);
     expect(await prisma.priceObservation.count()).toBe(2);
+    await app.close();
+  });
+
+  it("client-reported skew: effectiveAt is server time, clientObservedAt stored", async () => {
+    const app = await makeApp();
+    const clientTime = new Date(Date.now() - 5 * 60_000); // 5 min ago
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ observedAt: clientTime.toISOString() }),
+    });
+    expect(res.statusCode).toBe(201);
+    const obs = await prisma.priceObservation.findFirstOrThrow();
+    expect(Math.abs(obs.effectiveAt.getTime() - Date.now())).toBeLessThan(5000);
+    expect(obs.clientObservedAt?.toISOString()).toBe(clientTime.toISOString());
+    expect(obs.clientSkewSeconds).toBe(
+      Math.round((clientTime.getTime() - obs.receivedAt.getTime()) / 1000),
+    );
     await app.close();
   });
 
@@ -104,15 +135,40 @@ describeIfDb("api integration", () => {
     const app = await makeApp();
     const cases: unknown[] = [
       amazonObservation({ priceCents: 1.5 }),
+      amazonObservation({ priceCents: 0 }),
       amazonObservation({ currency: "usd" }),
       { ...amazonObservation(), retailer: "walmart" },
       amazonObservation({ observedAt: new Date(Date.now() + 60 * 60_000).toISOString() }),
       amazonObservation({ observedAt: new Date(Date.now() - 8 * 86_400_000).toISOString() }),
+      amazonObservation({ source: "mystery:source" }),
+      amazonObservation({ referenceType: undefined }),
+      { ...amazonObservation(), referencePriceCents: undefined, referenceType: "UNKNOWN" },
     ];
     for (const payload of cases) {
       const res = await app.inject({ method: "POST", url: "/v1/observations", payload });
       expect(res.statusCode, JSON.stringify(payload)).toBe(400);
     }
+
+    // schemaVersion has a dedicated error code when it is a known-but-wrong number
+    const v2 = await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: { ...amazonObservation(), schemaVersion: 2 },
+    });
+    expect(v2.statusCode).toBe(400);
+    expect(v2.json().error).toBe("unsupported_schema_version");
+
+    const missing = await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: (() => {
+        const body: Record<string, unknown> = { ...amazonObservation() };
+        delete body.schemaVersion;
+        return body;
+      })(),
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error).toBe("invalid_observation");
     await app.close();
   });
 
@@ -146,13 +202,16 @@ describeIfDb("api integration", () => {
     const listing = await prisma.listing.findFirstOrThrow();
 
     const now = Date.now();
+    const ds = await dataSourceId(OBSERVATION_SOURCES.SYNTHETIC_TEST);
     const rows = Array.from({ length: 120 }, (_, i) => ({
       listingId: listing.id,
+      dataSourceId: ds,
       priceCents: 30000 + (i % 5) * 100,
+      priceType: "STANDARD" as const,
       referencePriceCents: null,
       currency: "USD",
-      source: "test-seed",
-      observedAt: new Date(now - (119 - i) * 86_400_000),
+      effectiveAt: new Date(now - (119 - i) * 86_400_000),
+      schemaVersion: 1,
       synthetic: false,
     }));
     await prisma.priceObservation.createMany({ data: rows });
@@ -160,17 +219,24 @@ describeIfDb("api integration", () => {
     await prisma.priceObservation.create({
       data: {
         listingId: listing.id,
+        dataSourceId: ds,
         priceCents: 29900,
+        priceType: "STANDARD",
         referencePriceCents: 49900,
+        referenceType: "UNKNOWN",
         currency: "USD",
-        source: "test-seed",
-        observedAt: new Date(now),
+        effectiveAt: new Date(now),
+        schemaVersion: 1,
         synthetic: false,
       },
     });
-    await prisma.priceObservation.deleteMany({
-      where: { listingId: listing.id, source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT },
+    const extObs = await prisma.priceObservation.findFirstOrThrow({
+      where: {
+        listingId: listing.id,
+        dataSource: { key: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT },
+      },
     });
+    await setObservationStatus(prisma, extObs.id, "EXCLUDED", "test setup");
 
     const res = await app.inject({
       method: "GET",
@@ -180,15 +246,16 @@ describeIfDb("api integration", () => {
     const body = res.json();
 
     const stored = await prisma.priceObservation.findMany({
-      where: { listingId: listing.id, synthetic: false },
-      orderBy: { observedAt: "asc" },
+      where: { listingId: listing.id, synthetic: false, status: "ACCEPTED" },
+      orderBy: { effectiveAt: "asc" },
+      include: { dataSource: true },
     });
     const direct = analyzeListing({
       observations: stored.map((o) => ({
         priceCents: o.priceCents,
         referencePriceCents: o.referencePriceCents,
-        observedAt: o.observedAt.toISOString(),
-        source: o.source,
+        effectiveAt: o.effectiveAt.toISOString(),
+        sourceKey: o.dataSource.key,
       })),
       asOf: new Date(),
     });
@@ -207,10 +274,12 @@ describeIfDb("api integration", () => {
     await prisma.priceObservation.create({
       data: {
         listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.SYNTHETIC_TEST),
         priceCents: 100,
+        priceType: "STANDARD",
         currency: "USD",
-        source: "test-synthetic",
-        observedAt: new Date(Date.now() - 60_000),
+        effectiveAt: new Date(Date.now() - 60_000),
+        schemaVersion: 1,
         synthetic: true,
       },
     });
@@ -234,22 +303,27 @@ describeIfDb("api integration", () => {
     const listing = await prisma.listing.findFirstOrThrow();
     const now = Date.now();
     // two obs same day (median), one old obs 200 days back
+    const ds = await dataSourceId(OBSERVATION_SOURCES.SYNTHETIC_TEST);
     await prisma.priceObservation.createMany({
       data: [
         {
           listingId: listing.id,
+          dataSourceId: ds,
           priceCents: 31000,
+          priceType: "STANDARD",
           currency: "USD",
-          source: "t",
-          observedAt: new Date(now - 60_000),
+          effectiveAt: new Date(now - 60_000),
+          schemaVersion: 1,
           synthetic: false,
         },
         {
           listingId: listing.id,
+          dataSourceId: ds,
           priceCents: 50000,
+          priceType: "STANDARD",
           currency: "USD",
-          source: "t",
-          observedAt: new Date(now - 200 * 86_400_000),
+          effectiveAt: new Date(now - 200 * 86_400_000),
+          schemaVersion: 1,
           synthetic: false,
         },
       ],
@@ -332,11 +406,13 @@ describeIfDb("api integration", () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().enrichment.bestbuyApi).toBe("recorded");
     const apiRows = await prisma.priceObservation.findMany({
-      where: { source: OBSERVATION_SOURCES.BESTBUY_API },
+      where: { dataSource: { key: OBSERVATION_SOURCES.BESTBUY_API } },
     });
     expect(apiRows).toHaveLength(1);
     expect(apiRows[0]!.priceCents).toBe(27999);
     expect(apiRows[0]!.referencePriceCents).toBe(39999);
+    expect(apiRows[0]!.priceType).toBe("STANDARD");
+    expect(apiRows[0]!.referenceType).toBe("REGULAR_PRICE");
     // second request within 60 min → duplicate, no second API row
     const res2 = await app.inject({
       method: "POST",
@@ -350,9 +426,11 @@ describeIfDb("api integration", () => {
       },
     });
     expect(res2.json().enrichment.bestbuyApi).toBe("duplicate");
-    expect(await prisma.priceObservation.count({ where: { source: "bestbuy:products-api" } })).toBe(
-      1,
-    );
+    expect(
+      await prisma.priceObservation.count({
+        where: { dataSource: { key: "bestbuy:products-api" } },
+      }),
+    ).toBe(1);
     await app.close();
   });
 
@@ -391,5 +469,132 @@ describeIfDb("api integration", () => {
     expect(r2.statusCode).toBe(201);
     expect(r2.json().enrichment.bestbuyApi).toBe("error");
     await app2.close();
+  });
+
+  it("variant payload creates a shared ListingVariant row", async () => {
+    const app = await makeApp();
+    const variant = { Size: "Large", Color: "Blue" };
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ variant }),
+    });
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      // different price so dedup doesn't collapse the second row
+      payload: amazonObservation({ priceCents: 29800, variant }),
+    });
+    const variants = await prisma.listingVariant.findMany();
+    expect(variants).toHaveLength(1);
+    expect(variants[0]!.attributes).toEqual(variant);
+    const obs = await prisma.priceObservation.findMany({ orderBy: { id: "asc" } });
+    expect(obs).toHaveLength(2);
+    expect(obs[0]!.variantId).toBe(variants[0]!.id);
+    expect(obs[1]!.variantId).toBe(variants[0]!.id);
+    await app.close();
+  });
+
+  it("setObservationStatus appends an event and analysis excludes QUARANTINED rows", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    await app.inject({
+      method: "POST",
+      url: "/v1/observations",
+      payload: amazonObservation({ priceCents: 29800 }),
+    });
+    const newest = await prisma.priceObservation.findFirstOrThrow({
+      orderBy: { id: "desc" },
+    });
+    await setObservationStatus(prisma, newest.id, "QUARANTINED", "suspicious row");
+
+    const events = await prisma.observationStatusEvent.findMany({
+      where: { observationId: newest.id },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]!.fromStatus).toBe("ACCEPTED");
+    expect(events[0]!.toStatus).toBe("QUARANTINED");
+    expect(events[0]!.reason).toBe("suspicious row");
+    // status change leaves the fact columns untouched
+    expect(newest.priceCents).toBe(29800);
+
+    const analysis = (
+      await app.inject({
+        method: "GET",
+        url: "/v1/listings/amazon/B0TESTASIN/analysis",
+      })
+    ).json();
+    expect(analysis.currentPriceCents).toBe(29900); // quarantined newest is skipped
+    await app.close();
+  });
+
+  it("priceType USED rows are excluded from analysis", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const listing = await prisma.listing.findFirstOrThrow();
+    await prisma.priceObservation.create({
+      data: {
+        listingId: listing.id,
+        dataSourceId: await dataSourceId(OBSERVATION_SOURCES.SYNTHETIC_TEST),
+        priceCents: 100,
+        priceType: "USED",
+        currency: "USD",
+        effectiveAt: new Date(Date.now() + 60_000), // would be "current" if eligible
+        schemaVersion: 1,
+        synthetic: false,
+      },
+    });
+    const analysis = (
+      await app.inject({
+        method: "GET",
+        url: "/v1/listings/amazon/B0TESTASIN/analysis",
+      })
+    ).json();
+    expect(analysis.currentPriceCents).toBe(29900);
+    expect(analysis.stats.observationCount).toBe(1);
+    await app.close();
+  });
+
+  it("DB CHECK constraint rejects priceCents 0 (below the API layer)", async () => {
+    const listing = await prisma.listing.create({
+      data: {
+        retailer: {
+          connectOrCreate: {
+            where: { id: "amazon" },
+            create: { id: "amazon", displayName: "Amazon" },
+          },
+        },
+        externalId: "B0CHECK000",
+        url: "https://example.com",
+        title: "t",
+      },
+    });
+    await expect(
+      prisma.priceObservation.create({
+        data: {
+          listingId: listing.id,
+          dataSourceId: await dataSourceId(OBSERVATION_SOURCES.SYNTHETIC_TEST),
+          priceCents: 0,
+          currency: "USD",
+          effectiveAt: new Date(),
+          schemaVersion: 1,
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("append-only trigger: fact-column update and delete are rejected", async () => {
+    const app = await makeApp();
+    await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
+    const obs = await prisma.priceObservation.findFirstOrThrow();
+    await expect(
+      prisma.priceObservation.update({ where: { id: obs.id }, data: { priceCents: 1 } }),
+    ).rejects.toThrow(/append-only/);
+    await expect(prisma.priceObservation.delete({ where: { id: obs.id } })).rejects.toThrow(
+      /append-only/,
+    );
+    // status-only update still works
+    await prisma.priceObservation.update({ where: { id: obs.id }, data: { status: "EXCLUDED" } });
+    await app.close();
   });
 });

@@ -1,22 +1,51 @@
 import { createHash } from "node:crypto";
-import { Prisma, type PrismaClient } from "@prisma/client";
-import { OBSERVATION_SOURCES, RETAILERS, type RetailerObservation } from "@pricetruth/shared";
+import {
+  Prisma,
+  type ObservationStatus,
+  type PrismaClient,
+  type PriceType as PrismaPriceType,
+  type ReferencePriceType as PrismaReferencePriceType,
+} from "@prisma/client";
+import {
+  OBSERVATION_SOURCES,
+  RETAILERS,
+  type PriceType,
+  type ReferencePriceType,
+  type RetailerObservation,
+} from "@pricetruth/shared";
 import type { AppConfig } from "../config.js";
 import { fetchBestBuyProduct, type FetchLike } from "./bestbuyApi.js";
+import { resolveObservationTime } from "./timePolicy.js";
 
 const DEDUP_WINDOW_MS = 60 * 60 * 1000;
-const MAX_FUTURE_MS = 10 * 60 * 1000;
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const IDENTIFIER_TYPE: Record<string, "ASIN" | "BESTBUY_SKU"> = {
   amazon: "ASIN",
   bestbuy: "BESTBUY_SKU",
 };
 
-export function userAgentHash(userAgent: string | undefined): string | null {
-  if (!userAgent) return null;
-  return createHash("sha256").update(userAgent).digest("hex");
-}
+// Type-level proof that the shared literals and the Prisma enums are identical.
+const priceTypeMap = {
+  STANDARD: "STANDARD",
+  SALE: "SALE",
+  MEMBER: "MEMBER",
+  SUBSCRIPTION: "SUBSCRIPTION",
+  COUPON_REQUIRED: "COUPON_REQUIRED",
+  INSTALLMENT: "INSTALLMENT",
+  USED: "USED",
+  REFURBISHED: "REFURBISHED",
+  MARKETPLACE: "MARKETPLACE",
+  UNKNOWN: "UNKNOWN",
+} satisfies Record<PriceType, PrismaPriceType>;
+
+const referenceTypeMap = {
+  WAS_PRICE: "WAS_PRICE",
+  LIST_PRICE: "LIST_PRICE",
+  MSRP: "MSRP",
+  COMP_VALUE: "COMP_VALUE",
+  REGULAR_PRICE: "REGULAR_PRICE",
+  UNKNOWN: "UNKNOWN",
+} satisfies Record<ReferencePriceType, PrismaReferencePriceType>;
 
 export class ObservationRejected extends Error {
   readonly statusCode = 400;
@@ -26,6 +55,7 @@ export interface IngestResult {
   accepted: boolean;
   duplicate: boolean;
   listingId: string;
+  /** BigInt primary key serialised as a decimal string. */
   observationId: string;
   enrichment: { bestbuyApi: "recorded" | "duplicate" | "skipped" | "disabled" | "error" };
 }
@@ -96,14 +126,48 @@ async function upsertListing(
   });
 }
 
+/** Canonical JSON fingerprint: sha256 of entries sorted by key. */
+export function variantFingerprint(attributes: Record<string, string>): string {
+  const canonical = JSON.stringify(
+    Object.fromEntries(Object.entries(attributes).sort(([a], [b]) => a.localeCompare(b))),
+  );
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+async function upsertVariant(
+  prisma: PrismaClient,
+  listingId: string,
+  attributes: Record<string, string>,
+): Promise<string> {
+  const fingerprint = variantFingerprint(attributes);
+  const existing = await prisma.listingVariant.findUnique({
+    where: { listingId_fingerprint: { listingId, fingerprint } },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  return (
+    await prisma.listingVariant.create({
+      data: { listingId, fingerprint, attributes },
+      select: { id: true },
+    })
+  ).id;
+}
+
 interface ObservationFields {
   priceCents: number;
+  priceType: PriceType;
   referencePriceCents: number | null;
+  referenceType: ReferencePriceType | null;
   currency: string;
   inStock: boolean | null;
-  variant: Record<string, string> | null;
-  source: string;
-  observedAt: Date;
+  variantId: string | null;
+  dataSourceId: string;
+  schemaVersion: number;
+  extractorVersion: string | null;
+  clientObservedAt: Date | null;
+  effectiveAt: Date;
+  clientSkewSeconds: number | null;
+  synthetic: boolean;
 }
 
 async function findDuplicate(prisma: PrismaClient, listingId: string, fields: ObservationFields) {
@@ -113,13 +177,13 @@ async function findDuplicate(prisma: PrismaClient, listingId: string, fields: Ob
       priceCents: fields.priceCents,
       referencePriceCents: fields.referencePriceCents,
       currency: fields.currency,
-      source: fields.source,
-      observedAt: {
-        gte: new Date(fields.observedAt.getTime() - DEDUP_WINDOW_MS),
-        lte: new Date(fields.observedAt.getTime() + DEDUP_WINDOW_MS),
+      dataSourceId: fields.dataSourceId,
+      effectiveAt: {
+        gte: new Date(fields.effectiveAt.getTime() - DEDUP_WINDOW_MS),
+        lte: new Date(fields.effectiveAt.getTime() + DEDUP_WINDOW_MS),
       },
     },
-    orderBy: { observedAt: "desc" },
+    orderBy: { effectiveAt: "desc" },
     select: { id: true },
   });
 }
@@ -128,21 +192,28 @@ async function insertObservation(
   prisma: PrismaClient,
   listingId: string,
   fields: ObservationFields,
-  meta: { clientVersion: string | null; userAgentHash: string | null },
+  meta: { clientVersion: string | null },
 ) {
   return prisma.priceObservation.create({
     data: {
       listingId,
+      variantId: fields.variantId,
+      dataSourceId: fields.dataSourceId,
       priceCents: fields.priceCents,
+      priceType: priceTypeMap[fields.priceType],
       referencePriceCents: fields.referencePriceCents,
+      referenceType: fields.referenceType === null ? null : referenceTypeMap[fields.referenceType],
       currency: fields.currency,
       inStock: fields.inStock,
-      variant: fields.variant === null ? Prisma.JsonNull : fields.variant,
-      source: fields.source,
-      observedAt: fields.observedAt,
-      synthetic: false,
+      receivedAt: new Date(),
+      clientObservedAt: fields.clientObservedAt,
+      effectiveAt: fields.effectiveAt,
+      clientSkewSeconds: fields.clientSkewSeconds,
+      status: "ACCEPTED",
+      synthetic: fields.synthetic,
+      schemaVersion: fields.schemaVersion,
       clientVersion: meta.clientVersion,
-      userAgentHash: meta.userAgentHash,
+      extractorVersion: fields.extractorVersion,
     },
     select: { id: true },
   });
@@ -152,32 +223,49 @@ export async function ingestObservation(
   prisma: PrismaClient,
   config: Pick<AppConfig, "BESTBUY_API_KEY">,
   obs: RetailerObservation,
-  meta: { clientVersion: string | null; userAgentHash: string | null },
+  meta: { clientVersion: string | null },
   fetchImpl?: FetchLike,
 ): Promise<IngestResult> {
-  const observedAt = new Date(obs.observedAt);
-  const now = Date.now();
-  if (observedAt.getTime() - now > MAX_FUTURE_MS) {
-    throw new ObservationRejected("observedAt is more than 10 minutes in the future");
+  const dataSource = await prisma.dataSource.findUnique({ where: { key: obs.source } });
+  if (!dataSource) {
+    throw new ObservationRejected(`unknown source: ${obs.source}`);
   }
-  if (now - observedAt.getTime() > MAX_AGE_MS) {
-    throw new ObservationRejected("observedAt is older than 7 days");
-  }
+
+  const receivedAt = new Date();
+  const resolved = resolveObservationTime({
+    trustClass: dataSource.trustClass,
+    clientObservedAt: new Date(obs.observedAt),
+    receivedAt,
+  });
+  if (resolved.rejectReason) throw new ObservationRejected(resolved.rejectReason);
+  const { effectiveAt, clientSkewSeconds } = resolved;
 
   const listing = await upsertListing(prisma, obs);
 
+  const variantId =
+    obs.variant && Object.keys(obs.variant).length > 0
+      ? await upsertVariant(prisma, listing.id, obs.variant)
+      : null;
+
   const fields: ObservationFields = {
     priceCents: obs.priceCents,
+    priceType: obs.priceType,
     referencePriceCents: obs.referencePriceCents ?? null,
+    referenceType: obs.referenceType ?? null,
     currency: obs.currency,
     inStock: obs.inStock ?? null,
-    variant: obs.variant ?? null,
-    source: obs.source,
-    observedAt,
+    variantId,
+    dataSourceId: dataSource.id,
+    schemaVersion: obs.schemaVersion,
+    extractorVersion: obs.extractorVersion ?? null,
+    clientObservedAt: new Date(obs.observedAt),
+    effectiveAt,
+    clientSkewSeconds,
+    synthetic: false,
   };
 
   const existing = await findDuplicate(prisma, listing.id, fields);
-  let observationId: string;
+  let observationId: bigint;
   let accepted: boolean;
   if (existing) {
     observationId = existing.id;
@@ -187,13 +275,13 @@ export async function ingestObservation(
     accepted = true;
   }
 
-  const enrichment = await maybeEnrichBestBuy(prisma, config, listing.id, obs, meta, fetchImpl);
+  const enrichment = await maybeEnrichBestBuy(prisma, config, listing.id, obs, fetchImpl);
 
   return {
     accepted,
     duplicate: !accepted,
     listingId: listing.id,
-    observationId,
+    observationId: observationId.toString(),
     enrichment: { bestbuyApi: enrichment },
   };
 }
@@ -203,23 +291,27 @@ async function maybeEnrichBestBuy(
   config: Pick<AppConfig, "BESTBUY_API_KEY">,
   listingId: string,
   obs: RetailerObservation,
-  meta: { clientVersion: string | null; userAgentHash: string | null },
   fetchImpl?: FetchLike,
 ): Promise<"recorded" | "duplicate" | "skipped" | "disabled" | "error"> {
   if (obs.retailer !== "bestbuy") return "skipped";
   if (!config.BESTBUY_API_KEY) return "disabled";
 
-  const now = Date.now();
+  const now = new Date();
   try {
+    const dataSource = await prisma.dataSource.findUnique({
+      where: { key: OBSERVATION_SOURCES.BESTBUY_API },
+    });
+    if (!dataSource) return "error";
+
     // Respect Best Buy's rate limits: never call the API if we recorded an
     // enrichment row for this listing within the last 60 minutes.
     const recent = await prisma.priceObservation.findFirst({
       where: {
         listingId,
-        source: OBSERVATION_SOURCES.BESTBUY_API,
-        observedAt: {
-          gte: new Date(now - DEDUP_WINDOW_MS),
-          lte: new Date(now + DEDUP_WINDOW_MS),
+        dataSourceId: dataSource.id,
+        effectiveAt: {
+          gte: new Date(now.getTime() - DEDUP_WINDOW_MS),
+          lte: new Date(now.getTime() + DEDUP_WINDOW_MS),
         },
       },
       select: { id: true },
@@ -229,20 +321,60 @@ async function maybeEnrichBestBuy(
     const info = await fetchBestBuyProduct(obs.externalId, config.BESTBUY_API_KEY, fetchImpl);
     if (!info) return "error";
 
+    const { effectiveAt, clientSkewSeconds } = resolveObservationTime({
+      trustClass: dataSource.trustClass,
+      clientObservedAt: now,
+      receivedAt: now,
+    });
     const fields: ObservationFields = {
       priceCents: info.priceCents,
+      priceType: "STANDARD",
       referencePriceCents: info.referencePriceCents,
+      // The official API field is literally `regularPrice` — documented semantic.
+      referenceType: info.referencePriceCents === null ? null : "REGULAR_PRICE",
       currency: "USD",
       inStock: info.inStock,
-      variant: null,
-      source: OBSERVATION_SOURCES.BESTBUY_API,
-      observedAt: new Date(now),
+      variantId: null,
+      dataSourceId: dataSource.id,
+      schemaVersion: 1,
+      extractorVersion: null,
+      clientObservedAt: now,
+      effectiveAt,
+      clientSkewSeconds,
+      synthetic: false,
     };
     const dup = await findDuplicate(prisma, listingId, fields);
     if (dup) return "duplicate";
-    await insertObservation(prisma, listingId, fields, meta);
+    await insertObservation(prisma, listingId, fields, { clientVersion: null });
     return "recorded";
   } catch {
     return "error";
   }
+}
+
+/**
+ * The ONLY write path allowed to mutate an existing observation: flips `status`
+ * and appends an ObservationStatusEvent in one transaction. Ops/internal only —
+ * no route exposes it.
+ */
+export async function setObservationStatus(
+  prisma: PrismaClient,
+  observationId: bigint,
+  toStatus: ObservationStatus,
+  reason: string,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.priceObservation.findUniqueOrThrow({
+      where: { id: observationId },
+      select: { status: true },
+    });
+    if (current.status === toStatus) return;
+    await tx.priceObservation.update({
+      where: { id: observationId },
+      data: { status: toStatus },
+    });
+    await tx.observationStatusEvent.create({
+      data: { observationId, fromStatus: current.status, toStatus, reason },
+    });
+  });
 }

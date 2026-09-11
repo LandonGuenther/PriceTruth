@@ -26,7 +26,7 @@ export function median(values: number[]): number | null {
 export function collapseToDailySeries(observations: ScoringObservation[]): DailyPoint[] {
   const byDay = new Map<string, number[]>();
   for (const obs of observations) {
-    const day = utcDay(obs.observedAt);
+    const day = utcDay(obs.effectiveAt);
     const list = byDay.get(day);
     if (list) list.push(obs.priceCents);
     else byDay.set(day, [obs.priceCents]);

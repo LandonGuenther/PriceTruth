@@ -31,8 +31,14 @@ export async function makeApp(
 
 export async function truncateAll(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE "PriceObservation", "Listing", "ProductIdentifier", "Product", "Retailer" CASCADE',
+    'TRUNCATE "ObservationStatusEvent", "PriceObservation", "ListingVariant", "Listing", "ProductIdentifier", "Product", "Retailer" CASCADE',
   );
+}
+
+/** Migration-seeded dimension row; tests share it. */
+export async function dataSourceId(key: string): Promise<string> {
+  const ds = await prisma.dataSource.findUniqueOrThrow({ where: { key } });
+  return ds.id;
 }
 
 export function amazonObservation(
@@ -52,6 +58,10 @@ export function amazonObservation(
     inStock: true,
     source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
     observedAt: new Date().toISOString(),
+    schemaVersion: 1,
+    priceType: "STANDARD",
+    referenceType: "UNKNOWN",
+    extractorVersion: "1.0.0",
     ...overrides,
   };
 }

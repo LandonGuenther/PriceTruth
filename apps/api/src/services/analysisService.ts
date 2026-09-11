@@ -1,13 +1,16 @@
-import type { PrismaClient, Listing, PriceObservation } from "@prisma/client";
+import type { Listing, PrismaClient, PriceObservation } from "@prisma/client";
 import type { AnalysisResponse, HistoryResponse, RetailerId } from "@pricetruth/shared";
 import { RETAILERS } from "@pricetruth/shared";
 import {
   analyzeListing,
   collapseToDailySeries,
+  ELIGIBLE_PRICE_TYPES,
   type ScoringObservation,
 } from "@pricetruth/scoring";
 
-export type ListingWithObservations = Listing & { observations: PriceObservation[] };
+type ObservationWithSource = PriceObservation & { dataSource: { key: string } };
+
+export type ListingWithObservations = Listing & { observations: ObservationWithSource[] };
 
 export async function findListing(
   prisma: PrismaClient,
@@ -18,17 +21,25 @@ export async function findListing(
   return prisma.listing.findUnique({
     where: { retailerId_externalId: { retailerId: retailer, externalId } },
     include: {
-      observations: { where: { synthetic: false }, orderBy: { observedAt: "asc" } },
+      observations: {
+        where: {
+          synthetic: false,
+          status: "ACCEPTED",
+          priceType: { in: [...ELIGIBLE_PRICE_TYPES] },
+        },
+        orderBy: { effectiveAt: "asc" },
+        include: { dataSource: { select: { key: true } } },
+      },
     },
   });
 }
 
-function toScoring(obs: PriceObservation): ScoringObservation {
+function toScoring(obs: ObservationWithSource): ScoringObservation {
   return {
     priceCents: obs.priceCents,
     referencePriceCents: obs.referencePriceCents,
-    observedAt: obs.observedAt.toISOString(),
-    source: obs.source,
+    effectiveAt: obs.effectiveAt.toISOString(),
+    sourceKey: obs.dataSource.key,
   };
 }
 
@@ -48,7 +59,7 @@ export function analyzeListingRow(listing: ListingWithObservations): AnalysisRes
     currency: newest?.currency ?? "USD",
     currentPriceCents: newest?.priceCents ?? 0,
     referencePriceCents: newest?.referencePriceCents ?? null,
-    observedAt: newest?.observedAt.toISOString() ?? new Date(0).toISOString(),
+    effectiveAt: newest?.effectiveAt.toISOString() ?? new Date(0).toISOString(),
     typical: result.typical,
     stats: result.stats,
     confidence: result.confidence,
@@ -61,16 +72,16 @@ export function analyzeListingRow(listing: ListingWithObservations): AnalysisRes
 export function listingHistory(listing: ListingWithObservations, days: number): HistoryResponse {
   const cutoff = new Date(Date.now() - days * 86_400_000);
   const points = listing.observations
-    .filter((o) => o.observedAt >= cutoff)
+    .filter((o) => o.effectiveAt >= cutoff)
     .map((o) => ({
-      observedAt: o.observedAt.toISOString(),
+      effectiveAt: o.effectiveAt.toISOString(),
       priceCents: o.priceCents,
       referencePriceCents: o.referencePriceCents,
-      source: o.source,
+      source: o.dataSource.key,
     }));
 
   const daily = collapseToDailySeries(
-    listing.observations.filter((o) => o.observedAt >= cutoff).map(toScoring),
+    listing.observations.filter((o) => o.effectiveAt >= cutoff).map(toScoring),
   ).map((p) => ({ day: p.day, medianPriceCents: p.medianPriceCents }));
 
   return {

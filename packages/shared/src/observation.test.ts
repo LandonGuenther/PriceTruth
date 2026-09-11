@@ -11,6 +11,9 @@ const valid = {
   currency: "USD",
   source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
   observedAt: "2025-01-15T12:00:00.000Z",
+  schemaVersion: 1,
+  priceType: "STANDARD",
+  referenceType: "UNKNOWN",
 };
 
 describe("retailerObservationSchema", () => {
@@ -33,5 +36,16 @@ describe("retailerObservationSchema", () => {
     expect(() => retailerObservationSchema.parse({ ...valid, externalId: "  " })).toThrow();
     expect(() => retailerObservationSchema.parse({ ...valid, source: "" })).toThrow();
     expect(() => retailerObservationSchema.parse({ ...valid, observedAt: "yesterday" })).toThrow();
+    expect(() => retailerObservationSchema.parse({ ...valid, schemaVersion: 2 })).toThrow();
+    expect(() => retailerObservationSchema.parse({ ...valid, priceType: "NOPE" })).toThrow();
+  });
+
+  it("requires referenceType iff referencePriceCents is present", () => {
+    const noRef: Record<string, unknown> = { ...valid };
+    delete noRef.referencePriceCents;
+    delete noRef.referenceType;
+    expect(() => retailerObservationSchema.parse({ ...noRef, referenceType: "UNKNOWN" })).toThrow();
+    expect(() => retailerObservationSchema.parse({ ...valid, referenceType: undefined })).toThrow();
+    expect(retailerObservationSchema.parse(noRef).priceCents).toBe(29900);
   });
 });

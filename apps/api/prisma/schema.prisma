@@ -1,10 +1,9 @@
 // PriceTruth data model (V1).
 //
 // Immutability rules:
-// - PriceObservation rows are append-only: the API never updates or deletes them.
-//   `referencePriceCents` lives on the same row because a reference price is
-//   observed together with the price — there is no separate
-//   ReferencePriceObservation table in the MVP.
+// - PriceObservation rows are append-only facts. `status` is the ONLY mutable
+//   column and may change only via setObservationStatus(), which appends an
+//   ObservationStatusEvent; a DB trigger rejects any other UPDATE or DELETE.
 // - Listing holds descriptive metadata only (no price fields, so there is no
 //   mutable "currentPrice" to go stale). Its metadata fields MAY be updated to
 //   the newest observed values.
@@ -37,8 +36,59 @@ enum IdentifierType {
   BESTBUY_SKU
 }
 
+enum SourceType {
+  EXTENSION_DOM
+  OFFICIAL_RETAILER_API
+  MERCHANT_FEED
+  LICENSED_DATA
+  MANUAL_VERIFICATION
+  SYNTHETIC_TEST
+}
+
+enum TrustClass {
+  CLIENT_REPORTED
+  SERVER_FETCHED
+  VERIFIED
+  TEST
+}
+
+enum RedistributionReviewStatus {
+  UNKNOWN
+  INTERNAL_ONLY
+  AGGREGATED_ONLY
+  APPROVED
+}
+
+enum PriceType {
+  STANDARD
+  SALE
+  MEMBER
+  SUBSCRIPTION
+  COUPON_REQUIRED
+  INSTALLMENT
+  USED
+  REFURBISHED
+  MARKETPLACE
+  UNKNOWN
+}
+
+enum ReferencePriceType {
+  WAS_PRICE
+  LIST_PRICE
+  MSRP
+  COMP_VALUE
+  REGULAR_PRICE
+  UNKNOWN
+}
+
+enum ObservationStatus {
+  ACCEPTED
+  QUARANTINED
+  EXCLUDED
+}
+
 model Product {
-  id          String              @id @default(uuid())
+  id          String              @id @default(uuid()) @db.Uuid
   title       String
   brand       String?
   modelNumber String?
@@ -48,8 +98,8 @@ model Product {
 }
 
 model ProductIdentifier {
-  id        String         @id @default(uuid())
-  productId String
+  id        String         @id @default(uuid()) @db.Uuid
+  productId String         @db.Uuid
   product   Product        @relation(fields: [productId], references: [id])
   type      IdentifierType
   value     String
@@ -57,41 +107,90 @@ model ProductIdentifier {
   @@unique([type, value])
 }
 
+model DataSource {
+  id                         String                     @id @default(uuid()) @db.Uuid
+  key                        String                     @unique // "extension:content-script" etc.
+  displayName                String
+  sourceType                 SourceType
+  trustClass                 TrustClass
+  redistributionReviewStatus RedistributionReviewStatus @default(UNKNOWN)
+  termsReference             String?
+  reviewedAt                 DateTime?
+  notes                      String?
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  observations               PriceObservation[]
+}
+
 model Listing {
-  id          String             @id @default(uuid())
-  retailerId  String
-  retailer    Retailer           @relation(fields: [retailerId], references: [id])
-  externalId  String
-  url         String
-  title       String
-  brand       String?
-  modelNumber String?
-  gtin        String?
-  productId   String?
-  product     Product?           @relation(fields: [productId], references: [id])
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id           String            @id @default(uuid()) @db.Uuid
+  retailerId   String
+  retailer     Retailer          @relation(fields: [retailerId], references: [id])
+  externalId   String
+  url          String
+  title        String
+  brand        String?
+  modelNumber  String?
+  gtin         String?
+  productId    String?           @db.Uuid
+  product      Product?          @relation(fields: [productId], references: [id])
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   observations PriceObservation[]
+  variants     ListingVariant[]
 
   @@unique([retailerId, externalId])
 }
 
-model PriceObservation {
-  id                  String   @id @default(uuid())
-  listingId           String
-  listing             Listing  @relation(fields: [listingId], references: [id])
-  priceCents          Int
-  referencePriceCents Int?
-  currency            String   @db.Char(3)
-  inStock             Boolean?
-  variant             Json?
-  source              String
-  observedAt          DateTime
-  receivedAt          DateTime @default(now())
-  synthetic           Boolean  @default(false)
-  clientVersion       String?
-  userAgentHash       String?
-  ingestKey           String?
+model ListingVariant {
+  id           String             @id @default(uuid()) @db.Uuid
+  listingId    String             @db.Uuid
+  listing      Listing            @relation(fields: [listingId], references: [id])
+  fingerprint  String             @db.Char(64) // sha256 of canonical JSON (sorted keys) of attributes
+  attributes   Json
+  createdAt    DateTime           @default(now())
+  observations PriceObservation[]
 
-  @@index([listingId, observedAt])
+  @@unique([listingId, fingerprint])
+}
+
+model PriceObservation {
+  id                  BigInt                    @id @default(autoincrement())
+  listingId           String                    @db.Uuid
+  listing             Listing                   @relation(fields: [listingId], references: [id])
+  variantId           String?                   @db.Uuid
+  variant             ListingVariant?           @relation(fields: [variantId], references: [id])
+  dataSourceId        String                    @db.Uuid
+  dataSource          DataSource                @relation(fields: [dataSourceId], references: [id])
+  priceCents          Int
+  priceType           PriceType                 @default(UNKNOWN)
+  referencePriceCents Int?
+  referenceType       ReferencePriceType?
+  currency            String                    @db.Char(3)
+  inStock             Boolean?
+  receivedAt          DateTime                  @default(now()) // server-authoritative ingestion time
+  clientObservedAt    DateTime? // as reported by the client, untrusted
+  effectiveAt         DateTime // time used by history/scoring/dedup (see timePolicy)
+  clientSkewSeconds   Int? // clientObservedAt - receivedAt, for skew monitoring
+  status              ObservationStatus         @default(ACCEPTED)
+  synthetic           Boolean                   @default(false)
+  schemaVersion       Int
+  clientVersion       String?
+  extractorVersion    String?
+  statusEvents        ObservationStatusEvent[]
+
+  @@index([listingId, effectiveAt])
+  @@index([dataSourceId])
+}
+
+model ObservationStatusEvent {
+  id            BigInt            @id @default(autoincrement())
+  observationId BigInt
+  observation   PriceObservation  @relation(fields: [observationId], references: [id])
+  fromStatus    ObservationStatus
+  toStatus      ObservationStatus
+  reason        String
+  createdAt     DateTime          @default(now())
+
+  @@index([observationId])
 }

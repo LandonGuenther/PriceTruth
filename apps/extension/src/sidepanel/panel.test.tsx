@@ -15,6 +15,10 @@ const observation: RetailerObservation = {
   currency: "USD",
   source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
   observedAt: "2025-06-30T12:00:00.000Z",
+  schemaVersion: 1,
+  priceType: "STANDARD",
+  referenceType: "UNKNOWN",
+  extractorVersion: "1.0.0",
 };
 
 const analysis: AnalysisResponse = {
@@ -25,7 +29,7 @@ const analysis: AnalysisResponse = {
   currency: "USD",
   currentPriceCents: 29900,
   referencePriceCents: 49900,
-  observedAt: observation.observedAt,
+  effectiveAt: observation.observedAt,
   typical: { cents: 31900, window: "90d" },
   stats: {
     observationCount: 180,

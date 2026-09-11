@@ -1,9 +1,30 @@
 import type { FastifyInstance } from "fastify";
-import { CLIENT_VERSION_HEADER, retailerObservationSchema } from "@pricetruth/shared";
-import { ingestObservation, userAgentHash } from "../services/observationService.js";
+import {
+  CLIENT_VERSION_HEADER,
+  OBSERVATION_SCHEMA_VERSION,
+  retailerObservationSchema,
+} from "@pricetruth/shared";
+import { ingestObservation } from "../services/observationService.js";
 
 export function observationRoutes(app: FastifyInstance): void {
   app.post("/v1/observations", async (request, reply) => {
+    const body = request.body as { schemaVersion?: unknown } | undefined;
+    if (
+      typeof body?.schemaVersion === "number" &&
+      body.schemaVersion !== OBSERVATION_SCHEMA_VERSION
+    ) {
+      return reply.status(400).send({
+        error: "unsupported_schema_version",
+        message: `schemaVersion ${body.schemaVersion} is not supported (expected ${OBSERVATION_SCHEMA_VERSION})`,
+      });
+    }
+    if (body?.schemaVersion === undefined) {
+      return reply.status(400).send({
+        error: "invalid_observation",
+        message: "schemaVersion is required",
+      });
+    }
+
     const parsed = retailerObservationSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -18,7 +39,6 @@ export function observationRoutes(app: FastifyInstance): void {
       parsed.data,
       {
         clientVersion: (request.headers[CLIENT_VERSION_HEADER] as string | undefined) ?? null,
-        userAgentHash: userAgentHash(request.headers["user-agent"]),
       },
       app.fetchImpl,
     );

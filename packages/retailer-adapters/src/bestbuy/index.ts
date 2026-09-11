@@ -3,6 +3,7 @@ import {
   parsePriceToCents,
   type RetailerObservation,
 } from "@pricetruth/shared";
+import { ADAPTER_VERSION } from "../index.js";
 import type { ExtractionResult, RetailerAdapter } from "../types.js";
 import { extractFirstPrice } from "../utils.js";
 import { BESTBUY_SELECTORS as S } from "./selectors.js";
@@ -242,6 +243,10 @@ export const bestbuyAdapter: RetailerAdapter = {
       inStock: extractInStock(doc, product),
       source: OBSERVATION_SOURCES.EXTENSION_CONTENT_SCRIPT,
       observedAt: now.toISOString(),
+      schemaVersion: 1,
+      priceType: "STANDARD",
+      referenceType: referencePriceCents !== undefined ? "UNKNOWN" : undefined,
+      extractorVersion: ADAPTER_VERSION,
     };
     return { ok: true, observation, warnings };
   },
