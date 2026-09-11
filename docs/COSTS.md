@@ -1,25 +1,27 @@
 # Costs
 
-Status: **PLANNED / ESTIMATED** until Fly and Neon bills are observed after deploy.
+Status: **DEPLOYED STAGING** — Fly app is live; amounts below are list-price estimates until the first invoice.
 
-## Actual current cost
+## Actual current footprint
 
-| Item | Actual |
-|------|--------|
-| Fly.io staging app | $0 (not deployed yet in this session) |
-| Neon `pricetruth-staging` | Existing project; exact invoice not read without Neon access |
+| Item | State |
+|------|-------|
+| Fly app `pricetruth-api-staging` | Live in `iad`, 1× `shared-cpu-1x` 256 MB, always on |
+| Fly volume `pricetruth_archive` | 1 GB attached at `/data` |
+| Neon `neondb` (existing) | Live; used by staging API |
 | Cloudflare R2 | Not configured |
-| Archive volume | Not provisioned yet |
+| Dedicated IPv4 | Not allocated (shared IPv4 in use) |
 
-## Planned beta monthly baseline
+## Estimated monthly baseline
 
 | Item | Estimate | Notes |
 |------|----------|-------|
-| Fly `shared-cpu-1x` 256 MB × 1 always-on | ~$2–5 | `auto_stop` off for reliable extension calls |
-| Fly volume 1 GB | ~$0.15 | Local archive backend |
-| Neon staging (existing) | often $0–few dollars on free/launch tiers | Confirm in Neon console |
+| Fly `shared-cpu-1x` 256 MB always-on (`iad`) | ~$2.02 | Official Fly list price |
+| Fly volume 1 GB | ~$0.15 | Local archive |
+| Shared IPv4 + IPv6 | $0 | Dedicated IPv4 would add ~$2 if needed later |
+| Neon existing project | often $0 on free/launch | Confirm in Neon console |
 | GitHub Actions canary/jobs | pennies | Low-frequency crons |
-| **Total beta baseline** | **~$3–10 / month typical** | Hard guardrail: do not exceed ~$25 without owner approval |
+| **Typical total** | **~$2–5 / month** | Hard guardrail: do not exceed ~$25 without owner approval |
 
 ## Future estimates (not enabled)
 

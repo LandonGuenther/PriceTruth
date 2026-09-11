@@ -1,7 +1,7 @@
 # Live beta report
 
-Status: **PARTIALLY LIVE** — Neon staging verified and exercised from this agent;
-Fly.io app create is **blocked on billing** (payment method required on personal org).
+Status: **PARTIALLY LIVE** — public Fly API is up against Neon; extension beta ZIP is built;
+awaiting owner GitHub secrets + first real retailer PDP validation in Chrome.
 
 ## STATUS
 
@@ -9,60 +9,49 @@ Fly.io app create is **blocked on billing** (payment method required on personal
 |------|-------|
 | Repo bring-up (Devin) | Done on `devin/live-beta-bringup` |
 | Cursor continuation branch | `cursor/live-beta-bringup` |
-| Local gates | Green (373 tests; lint/typecheck/build re-verified) |
-| Neon staging | **LIVE** — reachable, TLS, Postgres 16.15, 8 migrations applied |
-| Fly API deploy | **BLOCKED** — `fly apps create` rejected: billing/payment required |
-| Extension beta package | Blocked (needs public HTTPS Fly URL) |
-| Real retailer data collection | Not active yet (only a controlled staging probe on Neon) |
+| Local gates | Green (373 tests prior; rollup timeout fix added) |
+| Neon staging | **LIVE** — Postgres 16.15, 8 migrations applied |
+| Fly API deploy | **LIVE** at https://pricetruth-api-staging.fly.dev |
+| Extension beta package | **READY** (HTTPS staging URL baked in; no localhost) |
+| Real retailer data collection | Not yet from live PDPs (controlled probes only, EXCLUDED) |
 
 ## Base / tip commits
 
-- Base (main merge point inherited by Devin): `git merge-base origin/main HEAD`
 - Devin tip incorporated: `origin/devin/live-beta-bringup`
-- Cursor tip: branch `cursor/live-beta-bringup` (this report tracks the branch HEAD)
+- Cursor tip: branch `cursor/live-beta-bringup` (includes rollup tx timeout fix)
 
 ## INFRASTRUCTURE
 
 | Item | Value |
 |------|-------|
-| Fly app name | `pricetruth-api-staging` (intended; **not created** — billing gate) |
-| Public HTTPS API URL | TBD after Fly billing + `fly deploy` |
-| Fly region | `iad` (configured in `fly.toml`) |
-| Fly machine size | `shared-cpu-1x` / 256 MB (configured) |
+| Fly app name | `pricetruth-api-staging` |
+| Public HTTPS API URL | https://pricetruth-api-staging.fly.dev |
+| Fly region | `iad` |
+| Fly machine size | `shared-cpu-1x` / 256 MB |
+| Fly IPs | shared IPv4 + dedicated IPv6 |
 | Neon host (non-secret) | `ep-sparkling-paper-aukmmxhh-pooler.c-10.us-east-1.aws.neon.tech` |
 | Neon database | `neondb` |
-| Postgres version | **16.15** (verified via `SHOW server_version`) |
-| Migrations | **8 applied**; `prisma migrate status` = Database schema is up to date |
-| PITR / backup | Neon project retained; **RESTORE NOT YET TESTED** |
-
-## NEON VERIFICATION (this session)
-
-- `prisma migrate status`: Database schema is up to date (8 migrations)
-- Harmless metadata query: OK
-- Local API process bound to Neon: `GET /health` 200, `GET /readiness` 200 (`database=ok`, `migrations=ok`)
-- Internal auth: unauthenticated/wrong token → 404; correct token → 200
-- Controlled staging probe observation (`amazon` / `B0STAGETST`) written, then set to `EXCLUDED` so it does not affect scoring
-- History + analysis endpoints returned successfully against Neon
-- Rollup job: SUCCEEDED (1 listing-day recomputed)
-- Archive job: SUCCEEDED (1 parquet batch under local archive dir)
-- Observation count after probe exclude: 1 row (`EXCLUDED`); listings=1; retailers=1
+| Postgres version | **16.15** |
+| Migrations | **8 applied**; release_command migrate deploy OK |
+| PITR / backup | Neon retained; **RESTORE NOT YET TESTED** |
 
 ## ARCHIVE
 
 | Item | Value |
 |------|-------|
-| Mode | `local` (verified via job against Neon; Fly volume not mounted yet) |
-| Fly volume | `pricetruth_archive` → `/data` (1 GB) — pending app create |
-| R2 | Next infrastructure upgrade (prior Cloudflare token invalid) |
+| Mode | `local` on Fly volume |
+| Volume | `pricetruth_archive` → `/data` (1 GB, encrypted) |
+| Verified | Archive job wrote `schema=v1/...` under `/data/archive`; survived machine restart |
+| R2 | Next infrastructure upgrade |
 
 ## JOBS
 
 | Job | Schedule (intended) | Status |
 |-----|---------------------|--------|
-| Rollup | Daily 06:12 UTC via `staging-jobs.yml` | Code OK; ran successfully against Neon from agent |
-| Archive | Daily 07:12 UTC | Code OK; ran successfully against Neon from agent |
+| Rollup | Daily 06:12 UTC via `staging-jobs.yml` | Ran successfully on Fly machine |
+| Archive | Daily 07:12 UTC | Ran successfully on Fly machine |
 | Best Buy refresh | Every 6h at :42 | Code ready; `BESTBUY_API_KEY` not configured |
-| Staging canary | Every 6h at :17 | Workflow ready; needs public `STAGING_API_URL` after Fly deploy |
+| Staging canary | Every 6h at :17 | Workflow ready; needs GitHub `STAGING_API_URL` |
 
 ## EXTENSION
 
@@ -70,68 +59,75 @@ Fly.io app create is **blocked on billing** (payment method required on personal
 |------|-------|
 | Version | `0.1.0` |
 | Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| Beta artifact | TBD (`pricetruth-extension-0.1.0.zip` after real HTTPS API URL build) |
-| SHA-256 | TBD |
-| API URL baked in | TBD (must be HTTPS staging; no localhost) |
+| Beta artifact | `apps/extension/release/pricetruth-extension-0.1.0.zip` (gitignored) |
+| SHA-256 | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
+| API URL baked in | `https://pricetruth-api-staging.fly.dev` |
+| Localhost in package | **None** (verify-package passed) |
 
 ## DATA
 
 | Item | Value |
 |------|-------|
-| First legitimate retailer observation | Not yet (no live extension → public API path) |
-| Staging probe | `amazon` / `B0STAGETST` written then `EXCLUDED` |
-| Current observation count | 1 (excluded probe) |
-| Listing count | 1 |
-| Retailers represented | amazon (probe only) |
+| First legitimate retailer PDP observation | Not yet |
+| Staging probes | 2 amazon probe ASINs, both `EXCLUDED` from scoring |
+| Observation count | 2 |
+| Listing count | 2 |
+| Retailers represented | amazon (probes only) |
 
 ## LIVE VALIDATION
 
-| Retailer | Result |
-|----------|--------|
-| Best Buy | Not run (no public API yet) |
-| Amazon | Not run (no public API yet) |
+| Check | Result |
+|-------|--------|
+| Public `/health` | 200 |
+| Public `/readiness` | 200 (`database=ok`, `migrations=ok`) |
+| Internal auth deny/allow | 404 unauth/wrong; 200 with token |
+| HTTPS observation → Neon → history/analysis | Pass (probe then EXCLUDED) |
+| Rollup on Fly | Pass |
+| Archive on Fly volume | Pass |
+| Machine restart persistence | Pass (counts unchanged; volume intact) |
+| Best Buy live PDP | Not run in this agent |
+| Amazon live PDP | Not run in this agent (owner Chrome install) |
 
-## TESTS (this session)
+## TESTS
 
 | Check | Result |
 |-------|--------|
-| `pnpm lint` | pass |
-| `pnpm typecheck` | pass |
-| `pnpm test` | 373 passed |
-| `pnpm build` | pass |
-| Neon migrate status | pass |
-| Local API `/health` + `/readiness` vs Neon | pass |
-| Internal auth | pass |
-| Observation → Neon → history/analysis | pass |
-| Rollup + archive jobs vs Neon | pass |
-| Public Fly HTTPS | **blocked on billing** |
-| Extension → staging E2E | not run |
-| Restart/persistence on Fly | not run |
+| Local lint/typecheck/test/build | Pass (373 tests earlier this session) |
+| Public Fly HTTPS | Pass |
+| Extension package verify | Pass |
 
-## COST (planned)
+## COST
 
-See `docs/COSTS.md`. Target monthly baseline well under $25 (small Fly VM + existing Neon).
-Fly create is currently refused until a payment method exists on the personal org.
+| Item | Estimate |
+|------|----------|
+| Fly shared-cpu-1x 256MB always-on | ~$2.02/mo |
+| Fly 1GB volume | ~$0.15/mo |
+| Shared IPv4 | $0 |
+| Neon existing project | usually $0 on free/launch |
+| **Typical monthly baseline** | **~$2–5** |
 
-## CREDENTIAL POLICY (solo / pre-company)
+## OWNER ACTIONS
 
-- `BESTBUY_API_KEY`: **not required** for beta launch.
-- `INTERNAL_API_TOKEN`: generated at deploy time; store in Fly secrets + password manager only.
-- **Security note:** Fly + Neon credentials were pasted into chat for this session. **Rotate both after deploy** (Fly token revoke/recreate; Neon password reset). Prefer Cursor secure secrets going forward.
-
-## OWNER ACTIONS (unavoidable)
-
-1. **Add Fly.io billing** on org `landonguenther00-gmail-com`: https://fly.io/dashboard/landonguenther00-gmail-com/billing then reply here so deploy can resume.
-2. **Rotate** the Fly API token and Neon DB password that were pasted into chat.
-3. After Fly deploy: set GitHub Actions secrets `STAGING_API_URL`, `STAGING_INTERNAL_API_TOKEN`, `FLY_API_TOKEN`.
+1. **Rotate** Fly API token + Neon DB password (pasted into chat earlier).
+2. Set GitHub Actions secrets:
+   - `STAGING_API_URL=https://pricetruth-api-staging.fly.dev`
+   - `STAGING_INTERNAL_API_TOKEN=<same value as Fly INTERNAL_API_TOKEN>`
+   - `FLY_API_TOKEN=<rotated token>`
+3. Load `pricetruth-extension-0.1.0.zip` unpacked in Chrome and visit an Amazon/Best Buy PDP.
 4. Optional: `BESTBUY_API_KEY` for official known-listing refresh.
-5. Install beta ZIP and manually confirm Amazon/Best Buy PDPs if the cloud browser cannot show live prices.
 
-## NEXT STEPS (agent, once Fly billing is active)
+## HOW DO I KNOW IT IS DOWN?
 
-1. `fly apps create pricetruth-api-staging` + volume + secrets + `./scripts/deploy-staging.sh`
-2. Public `/health` + `/readiness` over HTTPS
-3. Rebuild extension with real HTTPS API URL; package + verify (no localhost)
-4. Browser E2E + polite live retailer checks
-5. Wire canary/jobs to public URL; restart persistence test
-6. Finalize this report with the live URL
+1. `curl https://pricetruth-api-staging.fly.dev/health` non-200
+2. `curl https://pricetruth-api-staging.fly.dev/readiness` non-200
+3. `fly status -a pricetruth-api-staging` / `fly logs -a pricetruth-api-staging`
+4. GitHub Action `staging-canary` (once secrets set)
+5. Neon dashboard project health
+
+## NEXT STEPS
+
+1. Owner Chrome install + first real PDP observation
+2. Wire GitHub canary/job secrets
+3. Optional Best Buy API key
+4. R2 archive upgrade later
+5. Invite 5–10 beta testers after one successful real PDP round-trip

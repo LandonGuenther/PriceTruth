@@ -1,34 +1,32 @@
 # Live-beta handoff (next agent)
 
-Status when written: **Neon LIVE / Fly BLOCKED on billing**.
+Status when written: **API LIVE on Fly + Neon**. Extension beta ZIP ready.
 
-Agent: PriceTruth staging deployment on branch `cursor/live-beta-bringup`
+Branch: `cursor/live-beta-bringup`
 PR: https://github.com/LandonGuenther/PriceTruth/pull/11
+Public API: https://pricetruth-api-staging.fly.dev
 
-## What works now
+## Verified live
 
-- Branch `cursor/live-beta-bringup` includes Devin bring-up + Cursor Fly/docs/scripts
-- Local gates green (373 tests)
-- Neon `neondb` on host `ep-sparkling-paper-aukmmxhh-pooler.c-10.us-east-1.aws.neon.tech`:
-  - Postgres 16.15, TLS, 8 migrations applied
-  - Local API against Neon: health/readiness/internal auth OK
-  - Controlled probe observation written then EXCLUDED
-  - Rollup + archive jobs succeeded against Neon
-- `flyctl` authenticated; personal org (`landonguenther00@gmail.com`) visible
-- **`fly apps create pricetruth-api-staging` fails** until billing is added:
-  https://fly.io/dashboard/personal/billing
+- Fly app `pricetruth-api-staging` in `iad` (shared-cpu-1x / 256MB, auto-stop off)
+- Neon `neondb` on `ep-sparkling-paper-aukmmxhh-pooler.c-10.us-east-1.aws.neon.tech` (Postgres 16.15, 8 migrations)
+- Public `/health` + `/readiness` 200
+- Internal auth deny/allow
+- HTTPS observation write → Neon → history/analysis
+- Rollup + archive jobs on Fly
+- Machine restart persistence (Neon + `/data` archive volume)
+- Extension package `pricetruth-extension-0.1.0.zip` with staging HTTPS URL (no localhost)
+  - SHA-256 `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0`
 
-## Immediately after Fly billing is active
+## Remaining owner actions
 
-```bash
-# Secrets must be in env (prefer Cursor secure secrets — do not paste into chat)
-# Required: FLY_API_TOKEN, DATABASE_URL
-# Optional: INTERNAL_API_TOKEN (else generated), BESTBUY_API_KEY
-./scripts/deploy-staging.sh
-```
+1. Rotate Fly token + Neon password (were pasted into chat).
+2. GitHub secrets: `STAGING_API_URL`, `STAGING_INTERNAL_API_TOKEN`, `FLY_API_TOKEN`.
+3. Load beta ZIP in Chrome; capture first real Amazon/Best Buy PDP observation.
+4. Optional: `BESTBUY_API_KEY`.
 
-Then continue: public HTTPS checks, extension build with real URL, E2E, canary secrets, finalize `docs/LIVE_BETA_REPORT.md`, push, update PR #11.
+## Do not
 
-## Security
-
-Credentials were pasted into chat once. Owner should **rotate Fly token + Neon password** after staging is up. Never commit secrets.
+- Recreate Neon project
+- Paste secrets into chat/PR/docs
+- Merge until owner confirms a real PDP observation if that is the merge gate

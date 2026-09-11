@@ -1,6 +1,6 @@
 # Data collection start
 
-Status: **NOT ACTIVE YET** until the staging API is live and at least one legitimate retailer observation is stored.
+Status: **STAGING API LIVE** — controlled probes only so far; waiting on first legitimate retailer PDP observation from the Chrome extension.
 
 ## How real data enters PriceTruth
 
@@ -10,7 +10,7 @@ Browser extension observations only.
 
 1. A person opens an Amazon PDP in Chrome with PriceTruth installed.
 2. The extension reads the visible main price from the page.
-3. If the price is clear and confident, it POSTs an observation to the staging HTTPS API.
+3. If the price is clear and confident, it POSTs an observation to the staging HTTPS API (`https://pricetruth-api-staging.fly.dev`).
 4. The API appends an immutable row in Neon.
 
 There is no server-side Amazon scraping. CAPTCHA or hidden prices are not bypassed. If the page shows no usable price, PriceTruth records no observation.
@@ -27,14 +27,15 @@ Two paths:
 - Raw observations are **immutable** (append-only).
 - Daily rollups (`ListingDailyPrice`) are **derived** and can be recomputed.
 - History starts accumulating when real observations begin - there is **no fake backfilled retailer history**.
-- Synthetic/test rows are marked and must not affect consumer scoring.
+- Synthetic/test rows are marked / excluded and must not affect consumer scoring.
 
 ## Current collection state
 
 | Source | State |
 |--------|-------|
-| Amazon extension | Waiting on live staging API + beta package |
-| Best Buy extension | Waiting on live staging API + beta package |
-| Best Buy official refresh | Blocked on API key and deploy |
+| Amazon extension | API + beta ZIP ready; awaiting owner Chrome PDP test |
+| Best Buy extension | API + beta ZIP ready; awaiting owner Chrome PDP test |
+| Best Buy official refresh | Not configured (`BESTBUY_API_KEY` absent) |
+| Staging probes | 2 amazon probe rows present, both `EXCLUDED` |
 
 When the first legitimate observation lands, update `docs/LIVE_BETA_REPORT.md` with retailer, external id, price, source, status, and received time (no secrets).

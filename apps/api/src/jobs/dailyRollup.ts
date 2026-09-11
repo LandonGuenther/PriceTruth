@@ -110,44 +110,44 @@ export async function runDailyRollupJob(
     // Neon round-trip latency from Fly can exceed Prisma's 5s default under load.
     const progress = await prisma.$transaction(
       async (tx) => {
-      const obsCursor = await getCursor(tx, OBS_CURSOR);
-      const evCursor = await getCursor(tx, EVENT_CURSOR);
+        const obsCursor = await getCursor(tx, OBS_CURSOR);
+        const evCursor = await getCursor(tx, EVENT_CURSOR);
 
-      const newObs = await tx.priceObservation.findMany({
-        where: { id: { gt: obsCursor } },
-        orderBy: { id: "asc" },
-        take: batchSize,
-        select: { id: true, listingId: true, effectiveAt: true },
-      });
-      const newEvents = await tx.observationStatusEvent.findMany({
-        where: { id: { gt: evCursor } },
-        orderBy: { id: "asc" },
-        take: batchSize,
-        select: { id: true, observation: { select: { listingId: true, effectiveAt: true } } },
-      });
-
-      const pairs: ListingDay[] = [
-        ...newObs.map((o) => ({ listingId: o.listingId, day: utcDay(o.effectiveAt) })),
-        ...newEvents.map((e) => ({
-          listingId: e.observation.listingId,
-          day: utcDay(e.observation.effectiveAt),
-        })),
-      ];
-      const rolled = await rollupDays(tx, pairs);
-
-      const nextObsCursor = newObs.length ? newObs[newObs.length - 1]!.id : obsCursor;
-      const nextEvCursor = newEvents.length ? newEvents[newEvents.length - 1]!.id : evCursor;
-      for (const [jobName, cursor] of [
-        [OBS_CURSOR, nextObsCursor],
-        [EVENT_CURSOR, nextEvCursor],
-      ] as const) {
-        await tx.jobCheckpoint.upsert({
-          where: { jobName },
-          create: { jobName, cursor: cursor.toString() },
-          update: { cursor: cursor.toString() },
+        const newObs = await tx.priceObservation.findMany({
+          where: { id: { gt: obsCursor } },
+          orderBy: { id: "asc" },
+          take: batchSize,
+          select: { id: true, listingId: true, effectiveAt: true },
         });
-      }
-      return { obs: newObs.length, events: newEvents.length, pairs: rolled };
+        const newEvents = await tx.observationStatusEvent.findMany({
+          where: { id: { gt: evCursor } },
+          orderBy: { id: "asc" },
+          take: batchSize,
+          select: { id: true, observation: { select: { listingId: true, effectiveAt: true } } },
+        });
+
+        const pairs: ListingDay[] = [
+          ...newObs.map((o) => ({ listingId: o.listingId, day: utcDay(o.effectiveAt) })),
+          ...newEvents.map((e) => ({
+            listingId: e.observation.listingId,
+            day: utcDay(e.observation.effectiveAt),
+          })),
+        ];
+        const rolled = await rollupDays(tx, pairs);
+
+        const nextObsCursor = newObs.length ? newObs[newObs.length - 1]!.id : obsCursor;
+        const nextEvCursor = newEvents.length ? newEvents[newEvents.length - 1]!.id : evCursor;
+        for (const [jobName, cursor] of [
+          [OBS_CURSOR, nextObsCursor],
+          [EVENT_CURSOR, nextEvCursor],
+        ] as const) {
+          await tx.jobCheckpoint.upsert({
+            where: { jobName },
+            create: { jobName, cursor: cursor.toString() },
+            update: { cursor: cursor.toString() },
+          });
+        }
+        return { obs: newObs.length, events: newEvents.length, pairs: rolled };
       },
       { timeout: 60_000, maxWait: 10_000 },
     );
