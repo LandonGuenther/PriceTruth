@@ -43,6 +43,16 @@ An incoming observation is rejected as a duplicate (HTTP 200,
 Rows with `synthetic: true` (seeded demo/test data) are excluded from analysis
 and history responses. API-ingested observations are always `synthetic: false`.
 
+## Best Buy product URLs
+
+Best Buy serves two PDP URL formats: legacy `/site/<slug>/<sku>.p` (SKU in the
+URL) and new `/product/<slug>/<opaque code>` (no SKU in the URL). In both cases
+the adapter treats the **page SKU** as the listing `externalId` — JSON-LD
+`Product.sku`/`offers[].sku` first, then the "SKU: …" label — falling back to
+the URL SKU only when the page carries none. When a legacy URL SKU and the page
+SKU disagree (e.g. marketplace listings where the URL was redirected), the page
+value wins and a warning is recorded.
+
 ## Best Buy API usage
 
 When `BESTBUY_API_KEY` is configured and an observation for a Best Buy listing

@@ -23,6 +23,11 @@ describe("matchesUrl", () => {
     ["https://www.bestbuy.com/site/acme-tv/6418599.p?skuId=6418599", true],
     ["https://www.bestbuy.com/site/acme-tv/6418599.p", true],
     ["https://www.bestbuy.com/site/searchpage?skuId=6418599", true],
+    [
+      "https://www.bestbuy.com/product/apple-airpods-pro-2-wireless-active-noise-cancelling-earbuds-with-hearing-aid-feature-white/JJGCQ88C8X",
+      true,
+    ],
+    ["https://www.bestbuy.com/product/some-category-landing", false],
     ["https://www.bestbuy.com/site/tvs/abc.pcmcat", false],
     ["https://www.bestbuy.com/", false],
     ["https://www.amazon.com/dp/B0DEMOASIN", false],
@@ -93,6 +98,48 @@ describe("extract", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.observation.externalId).toBe("6418599");
+  });
+
+  it("new-format /product/ URL: identity and price from JSON-LD + DOM", () => {
+    const doc = loadFixture("product-new-url-marketplace.html");
+    const url = new URL(
+      "https://www.bestbuy.com/product/apple-airpods-pro-2-wireless-active-noise-cancelling-earbuds-with-hearing-aid-feature-white/JJGCQ88C8X",
+    );
+    expect(bestbuyAdapter.matchesUrl(url)).toBe(true);
+    expect(bestbuyAdapter.extractExternalId(url, doc)).toBe("10129617");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation).toMatchObject({
+      externalId: "10129617",
+      brand: "Apple",
+      modelNumber: "MTJV3LL/A/MTJV3AM/A",
+      priceCents: 23899,
+      referencePriceCents: 27499,
+      inStock: true,
+    });
+  });
+
+  it("new-format URL without JSON-LD: sku/price/reference via DOM", () => {
+    const doc = loadFixture("product-new-url-no-jsonld.html");
+    const url = new URL("https://www.bestbuy.com/product/some-slug/JJGCQ88C8X");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("10129617");
+    expect(r.observation.priceCents).toBe(23899);
+    expect(r.observation.referencePriceCents).toBe(27499);
+    expect(r.observation.inStock).toBe(true);
+  });
+
+  it("legacy URL sku vs page sku mismatch → page wins, warning emitted", () => {
+    const doc = loadFixture("product-new-url-marketplace.html");
+    const url = new URL("https://www.bestbuy.com/site/airpods/6447382.p?skuId=6447382");
+    const r = bestbuyAdapter.extract(doc, url, NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.externalId).toBe("10129617");
+    expect(r.warnings).toContain("url sku differs from page sku");
   });
 
   it("extractExternalId falls back to data-sku-id / spec table", () => {

@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  Hand-built variant of the new-format PDP without JSON-LD: exercises the DOM
+  "SKU: …" label, customer-price sr-only span, "Comp. Value" reference and the
+  add-to-cart presence → inStock fallback.
+-->
+<html lang="en">
+  <head>
+    <title>
+      Apple - AirPods Pro 2, Wireless Active Noise Cancelling Earbuds with
+      Hearing Aid Feature - White
+    </title>
+  </head>
+  <body>
+    <h1>
+      Apple - AirPods Pro 2, Wireless Active Noise Cancelling Earbuds with
+      Hearing Aid Feature - White
+    </h1>
+    <div class="pr-200 inline-block">Model: <!-- -->MTJV3LL/A/MTJV3AM/A</div>
+    <div class="pr-200 inline-block">SKU: <!-- -->10129617</div>
+
+    <div data-testid="price-block">
+      <div
+        data-testid="price-block-customer-price"
+        data-lu-target="customer_price"
+      >
+        <span
+          class="font-sans text-default text-style-body-md-400 sr-only"
+          >$238.99</span
+        ><span aria-hidden="true">$</span><span aria-hidden="true">238</span
+        ><span aria-hidden="true">99</span>
+      </div>
+      <div data-testid="price-block-regular-price">
+        <div data-testid="price-block-regular-price-message-text" role="text">
+          <span class="sr-only">The comparable value is </span
+          ><span class="whitespace-nowrap"
+            ><span aria-hidden="true">Comp. Value:<!-- --> </span><span
+              data-lu-target="comp_value"
+              >$274.99</span
+            ></span
+          >
+        </div>
+      </div>
+    </div>
+
+    <button data-testid="pdp-add-to-cart-10129617" type="button">
+      <span data-testid="pdp-add-to-cart-10129617-label">Add to cart</span>
+    </button>
+  </body>
+</html>
