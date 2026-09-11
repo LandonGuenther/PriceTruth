@@ -212,10 +212,14 @@ describe("ApiClient", () => {
     );
     vi.stubGlobal("fetch", spy);
     const client = new ApiClient("http://x");
-    await expect(client.getAnalysis("amazon", "B0TESTASIN")).rejects.toMatchObject({
-      name: "ApiRateLimitedError",
-      retryAfterSeconds: 7,
-    });
+    const err = await client.getAnalysis("amazon", "B0TESTASIN").then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ApiRateLimitedError);
+    expect(err).toMatchObject({ retryAfterSeconds: 7 });
     expect(spy).toHaveBeenCalledOnce();
   });
 
@@ -294,7 +298,8 @@ describe("response parsers", () => {
     const parsed = parseAnalysisResponse(analysisOk);
     expect(parsed.externalId).toBe("B0TESTASIN");
     expect((parsed as { unexpectedServerField?: boolean }).unexpectedServerField).toBe(true);
-    const { evidence: _e, ...noEvidence } = analysisOk;
+    const noEvidence = { ...analysisOk };
+    delete (noEvidence as { evidence?: unknown }).evidence;
     const synthesized = parseAnalysisResponse(noEvidence);
     expect(synthesized.evidence.eligibleCount).toBe(10);
   });
