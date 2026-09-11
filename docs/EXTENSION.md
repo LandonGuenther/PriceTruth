@@ -39,6 +39,15 @@ injected and tells the panel directly.
 `host_permission`. Default `http://127.0.0.1:3000` (see `.env.example`).
 Production builds must set it to the deployed API origin.
 
+## Supported product pages
+
+- **Amazon**: `/dp/<ASIN>`, `/gp/product/<ASIN>`, `/gp/aw/d/<ASIN>` (see the
+  adapter for the full pattern list).
+- **Best Buy**: legacy `/site/<slug>/<sku>.p` / `?skuId=` URLs **and** the new
+  `/product/<slug>/<code>` format. On `/product/` pages the URL carries no SKU,
+  so identity comes from the page (JSON-LD `sku`, then the "SKU: …" label); the
+  page SKU always wins over any URL-derived value.
+
 ## Permissions rationale
 
 | Permission / capability            | Why                                                                                                                         |
@@ -51,6 +60,32 @@ Production builds must set it to the deployed API origin.
 Deliberately absent: `tabs` (the panel only needs `tab.id`, which
 `chrome.tabs.query` exposes without it; it never reads `tab.url`), `history`,
 `<all_urls>`, `cookies`, `webRequest`, `scripting`.
+
+## Manual real-page testing
+
+Method used to verify the extension end-to-end against live pages:
+
+1. Start the API and DB (`pnpm --filter @pricetruth/api start`, `docker compose up -d db`).
+2. Load `apps/extension/dist` unpacked and open the side panel.
+3. Visit supported product pages one at a time (~8s apart — be polite).
+4. For each page, check that a `PriceObservation` row appeared
+   (`select o."priceCents", o."referencePriceCents" from "PriceObservation" o
+join "Listing" l on l.id = o."listingId" where l."externalId" = '<id>'
+order by o."observedAt" desc limit 1;`) and that
+   `GET /v1/listings/<retailer>/<id>/analysis` returns 200. With only a handful
+   of observations, expect `confidence: "INSUFFICIENT"` and null scores — that
+   is correct.
+
+Known Amazon behaviors seen live (all expected, not bugs):
+
+- Some product pages render no price at all — "add to cart to see price" or
+  "See All Buying Options" walls, or thin renders. The adapter reports
+  `no_price`/`not_product_page`, nothing is recorded.
+- Sustained browsing triggers Amazon `503 Service Unavailable` pages; no
+  observation is written for those. Waiting ~30s and continuing is enough;
+  never try to bypass.
+- `/dp/`, `/gp/product/` and `/gp/aw/d/` forms all ingest identically; revisits
+  within the dedup window are accepted as duplicates.
 
 ## Privacy / telemetry statement
 
