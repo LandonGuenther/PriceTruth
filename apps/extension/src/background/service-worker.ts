@@ -4,6 +4,15 @@ import { tabStateKey } from "../messages.js";
 import { ApiClient } from "./api.js";
 import { handleMessage, handleNavigationStart, type HandlerStorage } from "./handler.js";
 
+/**
+ * Background service worker.
+ *
+ * Toolbar click → side panel is owned by `action.default_popup` (popup.html).
+ * Do not call `setPanelBehavior({ openPanelOnActionClick: true })` while a
+ * default_popup is configured - Chrome documents that combination as
+ * unsupported, and it can make the action icon appear dead.
+ */
+
 const storage: HandlerStorage = {
   get: (key) => chrome.storage.session.get(key) as Promise<Record<string, TabState>>,
   set: (values) => chrome.storage.session.set(values),
@@ -32,8 +41,6 @@ const deps = {
   schedule: (fn: () => void, ms: number) => setTimeout(fn, ms),
   cancelSchedule: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
-
-void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender) => {
   void handleMessage(msg, sender.tab?.id, deps);

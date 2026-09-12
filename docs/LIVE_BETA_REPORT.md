@@ -57,10 +57,10 @@ awaiting owner GitHub secrets + first real retailer PDP validation in Chrome.
 
 | Item | Value |
 |------|-------|
-| Version | `0.1.0` |
+| Version | `0.1.4` |
 | Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| Beta artifact | `apps/extension/release/pricetruth-extension-0.1.0.zip` (gitignored) |
-| SHA-256 | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
+| Beta artifact | `apps/extension/release/pricetruth-extension-0.1.4.zip` (gitignored) |
+| SHA-256 | `3e188779450eb6b6db40bb807787e599e208bf69d384738fc6ad7c04a18abae6` |
 | API URL baked in | `https://pricetruth-api-staging.fly.dev` |
 | Localhost in package | **None** (verify-package passed) |
 
@@ -113,7 +113,7 @@ awaiting owner GitHub secrets + first real retailer PDP validation in Chrome.
    - `STAGING_API_URL=https://pricetruth-api-staging.fly.dev`
    - `STAGING_INTERNAL_API_TOKEN=<same value as Fly INTERNAL_API_TOKEN>`
    - `FLY_API_TOKEN=<rotated token>`
-3. Load `pricetruth-extension-0.1.0.zip` unpacked in Chrome and visit an Amazon/Best Buy PDP.
+3. Load the rebuilt `pricetruth-extension-0.1.4.zip` unpacked (remove any older copy first). Chrome/Edge: side panel. Opera: toolbar popup UI. Expect a light, verdict-first panel (not the old dark dashboard). Visit an Amazon/Best Buy PDP.
 4. Optional: `BESTBUY_API_KEY` for official known-listing refresh.
 
 ## HOW DO I KNOW IT IS DOWN?

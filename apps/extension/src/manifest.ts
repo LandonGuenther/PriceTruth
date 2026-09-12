@@ -40,6 +40,10 @@ export function buildManifest(version: string, apiOrigin: string) {
     side_panel: { default_path: "sidepanel.html" },
     action: {
       default_title: PRODUCT_NAME,
+      // Popup is the reliable toolbar-click → side panel path on MV3.
+      // See src/popup/main.ts. Keep this instead of relying only on
+      // setPanelBehavior / action.onClicked in the service worker.
+      default_popup: "popup.html",
       default_icon: {
         "16": "icons/icon16.png",
         "48": "icons/icon48.png",

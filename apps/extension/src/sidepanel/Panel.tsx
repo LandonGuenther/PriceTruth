@@ -1,6 +1,7 @@
 import type { TabState } from "../messages.js";
 import {
   ConfidenceBlock,
+  DetailsDrawer,
   DiagnosticsPanel,
   EmptyStates,
   Feedback,
@@ -8,11 +9,11 @@ import {
   HistoryChart,
   LearningCard,
   LiveStatus,
-  PriceSummary,
   ProductHeading,
   Reasons,
   ScoreCards,
   StatsTable,
+  VerdictHero,
 } from "./components.js";
 
 export function Panel({
@@ -51,17 +52,19 @@ export function Panel({
       {state.status === "ready" && (
         <>
           <ProductHeading observation={state.observation} />
-          <PriceSummary analysis={state.analysis} />
+          <VerdictHero analysis={state.analysis} />
           {insufficient && <LearningCard analysis={state.analysis} />}
-          <HistoryChart
-            history={state.history}
-            currentCents={state.analysis.currentPriceCents}
-            recordedLowCents={state.analysis.stats.recordedLowCents}
-          />
-          <StatsTable analysis={state.analysis} />
           <ScoreCards analysis={state.analysis} />
-          <Reasons analysis={state.analysis} />
-          <ConfidenceBlock analysis={state.analysis} />
+          <DetailsDrawer defaultOpen={!insufficient}>
+            <Reasons analysis={state.analysis} />
+            <ConfidenceBlock analysis={state.analysis} />
+            <HistoryChart
+              history={state.history}
+              currentCents={state.analysis.currentPriceCents}
+              recordedLowCents={state.analysis.stats.recordedLowCents}
+            />
+            <StatsTable analysis={state.analysis} />
+          </DetailsDrawer>
           <Feedback
             observation={state.observation}
             displayedCents={state.analysis.currentPriceCents}

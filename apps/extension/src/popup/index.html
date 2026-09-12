@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>PriceTruth</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+      }
+      /* Used when sidePanel API is missing (Opera) or open() fails. */
+      html.pt-popup-fallback,
+      html.pt-popup-fallback body {
+        width: 380px;
+        height: 600px;
+        overflow: hidden;
+      }
+      #root {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

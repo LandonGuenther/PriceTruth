@@ -28,15 +28,42 @@ function fail(msg: string): never {
 
 if (!existsSync(dist)) fail(`missing dist at ${dist}; run build first`);
 
-const required = ["manifest.json", "service-worker.js", "content.js", "sidepanel.html", "sidepanel.js"];
+const required = [
+  "manifest.json",
+  "service-worker.js",
+  "content.js",
+  "sidepanel.html",
+  "sidepanel.js",
+  "popup.html",
+  "popup.js",
+];
 for (const f of required) {
   if (!existsSync(path.join(dist, f))) fail(`dist missing ${f}`);
 }
 
+function assertRelativeHtml(fileName: string): void {
+  const html = readFileSync(path.join(dist, fileName), "utf8");
+  if (/\s(src|href)="\//.test(html)) {
+    fail(`${fileName} has root-absolute asset URLs (src|href=\"/...\"); use relative paths`);
+  }
+  if (/\s(src|href)="\.\.\//.test(html)) {
+    fail(`${fileName} has parent-relative asset URLs (../) after flatten; expected ./ paths`);
+  }
+  if (/\scrossorigin\b/.test(html)) {
+    fail(`${fileName} must not use crossorigin attributes on chrome-extension pages`);
+  }
+}
+assertRelativeHtml("sidepanel.html");
+assertRelativeHtml("popup.html");
+
 const manifest = JSON.parse(readFileSync(path.join(dist, "manifest.json"), "utf8")) as {
   host_permissions?: string[];
   permissions?: string[];
+  action?: { default_popup?: string };
 };
+if (manifest.action?.default_popup !== "popup.html") {
+  fail("manifest action.default_popup must be popup.html (toolbar click → side panel)");
+}
 const bannedPerms = new Set(["tabs", "history", "cookies", "webRequest", "webNavigation", "scripting"]);
 for (const p of manifest.permissions ?? []) {
   if (bannedPerms.has(p)) fail(`manifest must not include permission: ${p}`);
