@@ -138,9 +138,10 @@ describe("history path helpers", () => {
 });
 
 describe("Panel", () => {
-  it("ready state shows price, advertised discount, scores and labels", () => {
+  it("ready state shows verdict-first price, advertised discount, scores and labels", () => {
     render(<Panel state={ready} />);
     expect(screen.getByText("Acme Demo Widget 3000")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: COPY.verdict.softSale.title })).toBeTruthy();
     expect(screen.getAllByText("$299.00").length).toBeGreaterThan(0);
     expect(screen.getByText(/40% off store reference of \$499\.00/)).toBeTruthy();
     expect(screen.getByText(/~6\.3% below typical/)).toBeTruthy();
@@ -182,6 +183,7 @@ describe("Panel", () => {
       },
     };
     render(<Panel state={insuff} />);
+    expect(screen.getByRole("heading", { name: COPY.verdict.watching.title })).toBeTruthy();
     expect(screen.getByRole("heading", { name: COPY.learningTitle })).toBeTruthy();
     expect(screen.getByText(COPY.learningBody)).toBeTruthy();
     expect(screen.getByText("1 observation so far")).toBeTruthy();
