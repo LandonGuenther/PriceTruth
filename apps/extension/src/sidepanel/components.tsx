@@ -4,7 +4,7 @@ import type { AnalysisResponse, HistoryResponse } from "@pricetruth/shared";
 import type { RetailerObservation } from "@pricetruth/shared";
 import { API_BASE_URL } from "../config.js";
 import { DIAGNOSTICS_KEY, type TabState } from "../messages.js";
-import { COPY } from "./copy.js";
+import { COPY, type VerdictKind } from "./copy.js";
 
 export type ChartWindow = "30" | "90" | "180" | "all";
 
@@ -68,10 +68,23 @@ function extensionVersion(): string {
   }
 }
 
+export function deriveVerdict(analysis: AnalysisResponse): VerdictKind {
+  if (analysis.confidence.level === "INSUFFICIENT") return "watching";
+  const integrity = analysis.discountIntegrity.score;
+  const deal = analysis.dealScore.score;
+  if (integrity !== null && integrity < 40) return "softSale";
+  if (deal !== null && deal >= 60) return "goodDeal";
+  if (deal !== null && deal < 40) return "notGreat";
+  return "typical";
+}
+
 export function Header(): React.JSX.Element {
   return (
     <header className="header">
-      <div className="brand">{PRODUCT_NAME}</div>
+      <div className="brand-row">
+        <span className="brand-mark" aria-hidden="true" />
+        <div className="brand">{PRODUCT_NAME}</div>
+      </div>
       <p className="tagline">{COPY.tagline}</p>
     </header>
   );
@@ -103,48 +116,66 @@ export function ProductHeading({
 }): React.JSX.Element {
   const retailer = RETAILERS[observation.retailer];
   return (
-    <>
+    <div className="product">
       <h1 className="title">{observation.title}</h1>
       <div className="subtitle">
         {retailer.displayName} · {retailer.identifierLabel} {observation.externalId}
       </div>
-    </>
+    </div>
   );
 }
 
-export function PriceSummary({ analysis }: { analysis: AnalysisResponse }): React.JSX.Element {
-  const currency = analysis.currency;
+function storeLine(analysis: AnalysisResponse): string {
   const advertised = analysis.discountIntegrity.advertisedDiscountPct;
-  const vsTypical = analysis.discountIntegrity.actualDiscountVsTypicalPct;
-
-  let storeLine: string = COPY.noAdvertisedDiscount;
   if (advertised !== null && analysis.referencePriceCents !== null) {
-    storeLine = COPY.storeReference(
+    return COPY.storeReference(
       Math.round(advertised),
-      formatCents(analysis.referencePriceCents, currency),
+      formatCents(analysis.referencePriceCents, analysis.currency),
     );
   }
+  return COPY.noAdvertisedDiscount;
+}
 
-  let historyLine: string = COPY.typicalRecentPrice;
+function historyLine(analysis: AnalysisResponse): string {
+  const vsTypical = analysis.discountIntegrity.actualDiscountVsTypicalPct;
   if (vsTypical !== null) {
-    if (vsTypical >= 1) historyLine = COPY.belowTypical(vsTypical);
-    else if (vsTypical <= -1) historyLine = COPY.aboveTypical(Math.abs(vsTypical));
+    if (vsTypical >= 1) return COPY.belowTypical(vsTypical);
+    if (vsTypical <= -1) return COPY.aboveTypical(Math.abs(vsTypical));
   }
+  return COPY.typicalRecentPrice;
+}
+
+/** Compact store-vs-history compare (Honey-style two-beat read). */
+export function PriceSummary({ analysis }: { analysis: AnalysisResponse }): React.JSX.Element {
+  return (
+    <section className="compare" aria-label={COPY.compareHeading}>
+      <div className="compare-col">
+        <span className="compare-k">{COPY.storeSays}</span>
+        <span className="compare-v">{storeLine(analysis)}</span>
+      </div>
+      <div className="compare-divider" aria-hidden="true" />
+      <div className="compare-col">
+        <span className="compare-k">{COPY.historySays}</span>
+        <span className="compare-v">{historyLine(analysis)}</span>
+      </div>
+    </section>
+  );
+}
+
+export function VerdictHero({ analysis }: { analysis: AnalysisResponse }): React.JSX.Element {
+  const kind = deriveVerdict(analysis);
+  const copy = COPY.verdict[kind];
+  const price = formatCents(analysis.currentPriceCents, analysis.currency);
 
   return (
-    <section className="price-summary" aria-label={COPY.today}>
-      <div className="kv big">
-        <span className="k">{COPY.today}</span>
-        <span className="v">{formatCents(analysis.currentPriceCents, currency)}</span>
-      </div>
-      <div className="kv">
-        <span className="k">{COPY.storeSays}</span>
-        <span className="v">{storeLine}</span>
-      </div>
-      <div className="kv">
-        <span className="k">{COPY.historySays}</span>
-        <span className="v">{historyLine}</span>
-      </div>
+    <section className={`verdict verdict--${kind}`} aria-labelledby="verdict-title">
+      <p className="verdict-kicker">{COPY.today}</p>
+      <p className="verdict-price">{price}</p>
+      <h2 id="verdict-title" className="verdict-title">
+        {copy.title}
+      </h2>
+      <p className="verdict-body">{copy.body}</p>
+      <PriceSummary analysis={analysis} />
     </section>
   );
 }
@@ -228,14 +259,14 @@ export function HistoryChart({
               strokeWidth="1"
             />
           )}
-          <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" />
+          <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2.5" />
           <circle
             cx={x(points.length - 1)}
             cy={y(currentCents)}
-            r="4"
+            r="5"
             fill="var(--accent)"
             stroke="var(--bg)"
-            strokeWidth="1.5"
+            strokeWidth="2"
           />
           <text x={pad} y={12} fontSize="10" fill="var(--muted)">
             {formatCents(max)}
@@ -307,7 +338,7 @@ export function ScoreCards({ analysis }: { analysis: AnalysisResponse }): React.
   return (
     <div className="scores">
       {cards.map((c) => (
-        <div className="score-card" key={c.name}>
+        <div className={`score-card tier-${tier(c.score)}`} key={c.name}>
           <div className="name">{c.name}</div>
           <div className="value">{c.score === null ? COPY.notEnoughData : `${c.score}/100`}</div>
           <span className={`chip ${tier(c.score)}`}>{c.label}</span>
@@ -338,13 +369,28 @@ export function Reasons({ analysis }: { analysis: AnalysisResponse }): React.JSX
 
 export function ConfidenceBlock({ analysis }: { analysis: AnalysisResponse }): React.JSX.Element {
   return (
-    <section className="section">
-      <h2>{COPY.confidence}</h2>
-      <div className="confidence-level">{COPY.confidenceLabel(analysis.confidence.level)}</div>
-      <div className="confidence-detail">
+    <section className="confidence">
+      <span className="confidence-label">{COPY.confidence}</span>
+      <span className="confidence-level">{COPY.confidenceLabel(analysis.confidence.level)}</span>
+      <span className="confidence-detail">
         {COPY.observationsAcross(analysis.stats.observationCount, analysis.stats.coverageDays)}
-      </div>
+      </span>
     </section>
+  );
+}
+
+export function DetailsDrawer({
+  defaultOpen,
+  children,
+}: {
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <details className="details-drawer" open={defaultOpen}>
+      <summary className="details-summary">{COPY.detailsSummary}</summary>
+      <div className="details-body">{children}</div>
+    </details>
   );
 }
 
@@ -503,7 +549,12 @@ export function EmptyStates({
   onRetry?: () => void;
 }): React.JSX.Element {
   if (kind === "loading") {
-    return <div className="skeleton">{COPY.loading}</div>;
+    return (
+      <div className="empty empty--loading">
+        <div className="pulse-dot" aria-hidden="true" />
+        <p>{COPY.loading}</p>
+      </div>
+    );
   }
   return (
     <div className="empty">
