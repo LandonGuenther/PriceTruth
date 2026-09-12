@@ -6,9 +6,9 @@ const retailerNames = Object.values(RETAILERS)
 
 export const COPY = {
   tagline: "Know what it really costs.",
-  today: "Today's price",
-  storeSays: "Store says",
-  historySays: "History says",
+  today: "Price",
+  storeSays: "Listed as",
+  historySays: "Usually",
   noAdvertisedDiscount: "No advertised discount",
   storeReference: (pct: number, ref: string) => `${pct}% off store reference of ${ref}`,
   typicalRecentPrice: "Typical recent price",
@@ -31,10 +31,10 @@ export const COPY = {
   noPrice: "We couldn't read a price on this page, so nothing was recorded.",
   ambiguous:
     "We found this product but could not confidently determine its current price. Nothing was recorded.",
-  loading: "Checking this price…",
+  loading: "Reading price…",
   retry: "Retry",
-  learningTitle: "Still learning this listing",
-  learningBody: `${PRODUCT_NAME} needs more price history before Deal Score and Discount Integrity are ready. Today's price is shown; scores appear once coverage improves.`,
+  learningTitle: "Need more history for scores",
+  learningBody: `${PRODUCT_NAME} has too few price checks to score this listing yet. The price above is live; Deal Score and Discount Integrity unlock after more history.`,
   learningObserved: (count: number) =>
     count === 1 ? "1 observation so far" : `${count} observations so far`,
   learningFirstSeen: (when: string) => `First observed ${when}`,
@@ -50,7 +50,7 @@ export const COPY = {
     d180: "180D",
     all: "ALL",
   },
-  detailsSummary: "Price history and details",
+  detailsSummary: "History and details",
   feedbackPrompt: "Is this price correct?",
   feedbackLooksRight: "Looks right",
   feedbackReport: "Report issue",
@@ -73,30 +73,37 @@ export const COPY = {
   statusReady: "Price analysis ready",
   statusReadyInsufficient: "Price shown; scores waiting on more history",
   statusError: "Something went wrong",
-  /** Honey-style one-line verdicts (PriceTruth twist: truth-check, not coupons). */
+  /** One plain answer. No marketing voice. */
   verdict: {
     watching: {
-      title: "We're watching this price",
-      body: "Come back as we gather more history. Scores unlock when coverage improves.",
+      title: "Collecting history",
+      body: "Too early to rate this listing. Check back after a few more price reads.",
     },
     softSale: {
-      title: "This sale looks softer than advertised",
-      body: "The store discount claim is weaker than recent prices support.",
+      title: "Discount looks overstated",
+      body: "The store's sale claim is bigger than recent prices support.",
     },
     goodDeal: {
-      title: "This price checks out",
-      body: "Compared with recent history, today's price looks meaningfully better.",
+      title: "Better than usual",
+      body: "Today's price sits meaningfully below the recent typical.",
     },
     notGreat: {
-      title: "Not a standout deal right now",
-      body: "Recent history suggests you can often do better on this listing.",
+      title: "Higher than usual",
+      body: "Recent history says you can often find this for less.",
     },
     typical: {
-      title: "About typical for this listing",
-      body: "Today's price sits near what we usually see.",
+      title: "About average",
+      body: "Today's price is close to what this listing usually sells for.",
     },
   },
   compareHeading: "Store claim vs history",
+  statusChip: {
+    watching: "WATCHING",
+    softSale: "WEAK CLAIM",
+    goodDeal: "SOLID",
+    notGreat: "HIGH",
+    typical: "TYPICAL",
+  },
 } as const;
 
 export type VerdictKind = keyof typeof COPY.verdict;

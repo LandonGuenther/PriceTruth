@@ -55,9 +55,9 @@ export function Panel({
           <VerdictHero analysis={state.analysis} />
           {insufficient && <LearningCard analysis={state.analysis} />}
           <ScoreCards analysis={state.analysis} />
-          <Reasons analysis={state.analysis} />
-          <ConfidenceBlock analysis={state.analysis} />
           <DetailsDrawer defaultOpen={!insufficient}>
+            <Reasons analysis={state.analysis} />
+            <ConfidenceBlock analysis={state.analysis} />
             <HistoryChart
               history={state.history}
               currentCents={state.analysis.currentPriceCents}

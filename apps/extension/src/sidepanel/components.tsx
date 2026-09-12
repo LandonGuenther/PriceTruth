@@ -81,10 +81,7 @@ export function deriveVerdict(analysis: AnalysisResponse): VerdictKind {
 export function Header(): React.JSX.Element {
   return (
     <header className="header">
-      <div className="brand-row">
-        <span className="brand-mark" aria-hidden="true" />
-        <div className="brand">{PRODUCT_NAME}</div>
-      </div>
+      <div className="brand">{PRODUCT_NAME}</div>
       <p className="tagline">{COPY.tagline}</p>
     </header>
   );
@@ -148,15 +145,14 @@ function historyLine(analysis: AnalysisResponse): string {
 /** Compact store-vs-history compare (Honey-style two-beat read). */
 export function PriceSummary({ analysis }: { analysis: AnalysisResponse }): React.JSX.Element {
   return (
-    <section className="compare" aria-label={COPY.compareHeading}>
-      <div className="compare-col">
-        <span className="compare-k">{COPY.storeSays}</span>
-        <span className="compare-v">{storeLine(analysis)}</span>
+    <section className="facts" aria-label={COPY.compareHeading}>
+      <div className="fact">
+        <span className="fact-k">{COPY.storeSays}</span>
+        <span className="fact-v">{storeLine(analysis)}</span>
       </div>
-      <div className="compare-divider" aria-hidden="true" />
-      <div className="compare-col">
-        <span className="compare-k">{COPY.historySays}</span>
-        <span className="compare-v">{historyLine(analysis)}</span>
+      <div className="fact">
+        <span className="fact-k">{COPY.historySays}</span>
+        <span className="fact-v">{historyLine(analysis)}</span>
       </div>
     </section>
   );
@@ -168,13 +164,16 @@ export function VerdictHero({ analysis }: { analysis: AnalysisResponse }): React
   const price = formatCents(analysis.currentPriceCents, analysis.currency);
 
   return (
-    <section className={`verdict verdict--${kind}`} aria-labelledby="verdict-title">
-      <p className="verdict-kicker">{COPY.today}</p>
-      <p className="verdict-price">{price}</p>
-      <h2 id="verdict-title" className="verdict-title">
+    <section className={`answer answer--${kind}`} aria-labelledby="verdict-title">
+      <div className="answer-top">
+        <span className={`status-chip status-chip--${kind}`}>{COPY.statusChip[kind]}</span>
+        <span className="answer-kicker">{COPY.today}</span>
+      </div>
+      <p className="answer-price">{price}</p>
+      <h2 id="verdict-title" className="answer-title">
         {copy.title}
       </h2>
-      <p className="verdict-body">{copy.body}</p>
+      <p className="answer-body">{copy.body}</p>
       <PriceSummary analysis={analysis} />
     </section>
   );
@@ -183,12 +182,12 @@ export function VerdictHero({ analysis }: { analysis: AnalysisResponse }): React
 export function LearningCard({ analysis }: { analysis: AnalysisResponse }): React.JSX.Element {
   const first = analysis.stats.oldestObservedAt;
   return (
-    <section className="learning-card" aria-labelledby="learning-title">
-      <h2 id="learning-title" className="learning-title">
+    <section className="note" aria-labelledby="learning-title">
+      <h2 id="learning-title" className="note-title">
         {COPY.learningTitle}
       </h2>
-      <p className="learning-body">{COPY.learningBody}</p>
-      <ul className="learning-meta">
+      <p className="note-body">{COPY.learningBody}</p>
+      <ul className="note-meta">
         <li>{COPY.learningObserved(analysis.stats.observationCount)}</li>
         {first && <li>{COPY.learningFirstSeen(formatObservedDate(first))}</li>}
       </ul>
@@ -338,10 +337,19 @@ export function ScoreCards({ analysis }: { analysis: AnalysisResponse }): React.
   return (
     <div className="scores">
       {cards.map((c) => (
-        <div className={`score-card tier-${tier(c.score)}`} key={c.name}>
-          <div className="name">{c.name}</div>
-          <div className="value">{c.score === null ? COPY.notEnoughData : `${c.score}/100`}</div>
-          <span className={`chip ${tier(c.score)}`}>{c.label}</span>
+        <div className={`score-row tier-${tier(c.score)}`} key={c.name}>
+          <div className="score-main">
+            <span className="score-name">{c.name}</span>
+            <span className="score-value">
+              {c.score === null ? COPY.notEnoughData : `${c.score}/100`}
+            </span>
+          </div>
+          <span className="score-label">{c.label}</span>
+          {c.score !== null && (
+            <div className="score-bar" aria-hidden="true">
+              <span style={{ width: `${Math.max(0, Math.min(100, c.score))}%` }} />
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -387,9 +395,9 @@ export function DetailsDrawer({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <details className="details-drawer" open={defaultOpen}>
-      <summary className="details-summary">{COPY.detailsSummary}</summary>
-      <div className="details-body">{children}</div>
+    <details className="drawer" open={defaultOpen}>
+      <summary className="drawer-summary">{COPY.detailsSummary}</summary>
+      <div className="drawer-body">{children}</div>
     </details>
   );
 }
@@ -422,12 +430,12 @@ export function Feedback({
 
   return (
     <section className="feedback" aria-label={COPY.feedbackPrompt}>
-      <h2 className="feedback-prompt">{COPY.feedbackPrompt}</h2>
+      <p className="feedback-prompt">{COPY.feedbackPrompt}</p>
       <div className="feedback-actions">
-        <button type="button" className="feedback-btn" onClick={() => save("right")}>
+        <button type="button" className="link-btn" onClick={() => save("right")}>
           {COPY.feedbackLooksRight}
         </button>
-        <button type="button" className="feedback-btn secondary" onClick={() => save("report")}>
+        <button type="button" className="link-btn muted" onClick={() => save("report")}>
           {COPY.feedbackReport}
         </button>
       </div>
