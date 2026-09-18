@@ -180,22 +180,34 @@ interface ObservationFields {
   synthetic: boolean;
 }
 
+/**
+ * Dedup compares ONLY against the latest observation for the listing from the
+ * same data source (by effectiveAt, then id): same price/reference/currency
+ * AND |effectiveAt diff| within the window → duplicate. A row returning to a
+ * previous price (A → B → A) must insert — the newest row is what the page
+ * shows now.
+ */
 async function findDuplicate(prisma: PrismaClient, listingId: string, fields: ObservationFields) {
-  return prisma.priceObservation.findFirst({
-    where: {
-      listingId,
-      priceCents: fields.priceCents,
-      referencePriceCents: fields.referencePriceCents,
-      currency: fields.currency,
-      dataSourceId: fields.dataSourceId,
-      effectiveAt: {
-        gte: new Date(fields.effectiveAt.getTime() - DEDUP_WINDOW_MS),
-        lte: new Date(fields.effectiveAt.getTime() + DEDUP_WINDOW_MS),
-      },
+  const latest = await prisma.priceObservation.findFirst({
+    where: { listingId, dataSourceId: fields.dataSourceId },
+    orderBy: [{ effectiveAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      status: true,
+      priceCents: true,
+      referencePriceCents: true,
+      currency: true,
+      effectiveAt: true,
     },
-    orderBy: { effectiveAt: "desc" },
-    select: { id: true, status: true },
   });
+  if (!latest) return null;
+  const samePrice =
+    latest.priceCents === fields.priceCents &&
+    latest.referencePriceCents === fields.referencePriceCents &&
+    latest.currency === fields.currency;
+  const withinWindow =
+    Math.abs(latest.effectiveAt.getTime() - fields.effectiveAt.getTime()) <= DEDUP_WINDOW_MS;
+  return samePrice && withinWindow ? latest : null;
 }
 
 async function insertObservation(

@@ -121,9 +121,12 @@ Response 201:
 existing row's status, which may be `QUARANTINED` or already `CORROBORATED`.
 
 `observationId` is the row's BIGINT key serialised as a decimal string (JSON has
-no 64-bit integer). Duplicates (same price/reference/currency/dataSource within
-±60 min of `effectiveAt`) return 200 with `duplicate: true` and the existing
-`observationId`.
+no 64-bit integer). An observation is a duplicate only when the **latest**
+existing row for the same listing + dataSource (by `effectiveAt`, then id) has
+the same price/reference/currency and its `effectiveAt` is within ±60 min of the
+incoming one — then 200 with `duplicate: true` and the existing
+`observationId`. A price returning to an earlier value (A → B → A within the
+window) is a **new** row: dedup compares against the newest row only.
 
 For Best Buy observations with `BESTBUY_API_KEY` configured, an enrichment
 observation from the official Products API may be recorded;

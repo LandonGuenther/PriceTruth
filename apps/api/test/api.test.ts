@@ -93,6 +93,31 @@ describeIfDb("api integration", () => {
     await app.close();
   });
 
+  it("price returning to an earlier value (A→B→A) → 3 rows, not a duplicate", async () => {
+    const app = await makeApp();
+    const post = (priceCents: number) =>
+      app.inject({
+        method: "POST",
+        url: "/v1/observations",
+        payload: amazonObservation({ priceCents }),
+      });
+    await post(27999);
+    await post(25999);
+    const res = await post(27999);
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.accepted).toBe(true);
+    expect(body.duplicate).toBe(false);
+    expect(await prisma.priceObservation.count()).toBe(3);
+    // Analysis follows the latest row (back to A), not the older matching A.
+    const analysis = await app.inject({
+      method: "GET",
+      url: "/v1/listings/amazon/B0TESTASIN/analysis",
+    });
+    expect(analysis.json().currentPriceCents).toBe(27999);
+    await app.close();
+  });
+
   it("different price → new row", async () => {
     const app = await makeApp();
     await app.inject({ method: "POST", url: "/v1/observations", payload: amazonObservation() });
