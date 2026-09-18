@@ -6,16 +6,18 @@
  *   pnpm --filter @pricetruth/api ops listing <retailer> <externalId>
  *   pnpm --filter @pricetruth/api ops quarantined [--limit N]
  *   pnpm --filter @pricetruth/api ops jobs [--limit N]
+ *   pnpm --filter @pricetruth/api ops exclude <observationId> --reason "<text>"
  *   pnpm --filter @pricetruth/api ops remote      (PRICETRUTH_API_URL [+ INTERNAL_API_TOKEN])
  *
  * `status` prints the same payload as GET /internal/status. `remote` probes a
- * deployed API over HTTP and needs no DATABASE_URL; every other command reads
- * the local database and never writes.
+ * deployed API over HTTP and needs no DATABASE_URL. `exclude` is the only
+ * write command (owner correction; sets EXCLUDED via the status-event path);
+ * every other command reads the local database and never writes.
  */
 import type { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "../src/db.js";
 import { loadConfig } from "../src/config.js";
-import { getOpsStatus } from "../src/ops.js";
+import { excludeObservation, getOpsStatus } from "../src/ops.js";
 import {
   analyzeListingRow,
   defaultHistoryRepository,
@@ -28,6 +30,7 @@ const USAGE = `usage: pnpm ops <command>
   listing <retailer> <externalId>
   quarantined [--limit N]
   jobs [--limit N]
+  exclude <observationId> --reason "<text>"
   remote   (env: PRICETRUTH_API_URL, INTERNAL_API_TOKEN optional)`;
 
 const argv = process.argv.slice(2);
@@ -175,7 +178,7 @@ async function remote(): Promise<number> {
 
 async function main(): Promise<number> {
   if (cmd === "remote") return remote();
-  if (!cmd || !["status", "recent", "listing", "quarantined", "jobs"].includes(cmd)) {
+  if (!cmd || !["status", "recent", "listing", "quarantined", "jobs", "exclude"].includes(cmd)) {
     console.error(USAGE);
     return 1;
   }
@@ -187,6 +190,13 @@ async function main(): Promise<number> {
     else if (cmd === "listing") print(await listing(prisma, argv[1], argv[2]));
     else if (cmd === "quarantined") print(await quarantined(prisma));
     else if (cmd === "jobs") print(await jobs(prisma));
+    else if (cmd === "exclude") {
+      const id = argv[1];
+      const reason = flag("reason")?.trim();
+      if (!id || !/^\d+$/.test(id)) throw new Error("exclude needs a numeric observation id");
+      if (!reason) throw new Error('exclude needs --reason "<text>"');
+      print(await excludeObservation(prisma, BigInt(id), reason));
+    }
     return 0;
   } finally {
     await prisma.$disconnect();
