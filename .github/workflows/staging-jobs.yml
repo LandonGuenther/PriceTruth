@@ -1,17 +1,13 @@
 name: staging-jobs
 
-# Runs idempotent batch jobs against the deployed Fly staging API machine.
+# MANUAL FALLBACK ONLY. The real scheduler is Fly scheduled Machines
+# (pricetruth-rollup hourly / pricetruth-archive daily / pricetruth-bestbuy-refresh
+# daily — created and refreshed by scripts/fly-schedule-jobs.sh). Use this
+# workflow_dispatch to re-run a single job by hand.
 # Requires repository secrets:
 #   FLY_API_TOKEN
 #   FLY_APP_NAME   (defaults to pricetruth-api-staging if unset via env below)
 on:
-  schedule:
-    # Rollup once daily (06:12 UTC)
-    - cron: "12 6 * * *"
-    # Archive once daily (07:12 UTC)
-    - cron: "12 7 * * *"
-    # Best Buy known-listing refresh every 6 hours (offset from canary)
-    - cron: "42 */6 * * *"
   workflow_dispatch:
     inputs:
       job:
@@ -46,16 +42,7 @@ jobs:
           echo "app=$app" >> "$GITHUB_OUTPUT"
           job="${{ github.event.inputs.job }}"
           if [ -z "$job" ]; then
-            minute=$(date -u +%M)
-            hour=$(date -u +%H)
-            # cron routes: 06:12 rollup, 07:12 archive, *:42 bestbuy-refresh
-            if [ "$minute" = "12" ] && [ "$hour" = "06" ]; then
-              job=rollup
-            elif [ "$minute" = "12" ] && [ "$hour" = "07" ]; then
-              job=archive
-            else
-              job=bestbuy-refresh
-            fi
+            echo "job input required (workflow_dispatch only)"; exit 1
           fi
           echo "job=$job" >> "$GITHUB_OUTPUT"
           echo "selected job: $job on $app"
