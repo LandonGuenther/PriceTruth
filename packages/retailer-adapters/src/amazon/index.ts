@@ -14,7 +14,8 @@ const INSTALLMENT_CTX =
   /\/\s*mo(?:nth)?\b|\bper\s+month\b|\b\d+\s+months?\b|\binstallment|financing|affirm|with\s+prime\s+visa/i;
 
 /** Nearby copy that marks a dollar amount as coupon savings, not the product price. */
-const COUPON_CTX = /\bwith\s+coupon\b|\bclip\s+coupon\b|\bcoupon\s+applied\b|\bsave\s+\$[\d.]+\s+with\s+coupon\b/i;
+const COUPON_CTX =
+  /\bwith\s+coupon\b|\bclip\s+coupon\b|\bcoupon\s+applied\b|\bsave\s+\$[\d.]+\s+with\s+coupon\b/i;
 
 /** Nearby copy that marks a dollar amount as shipping, not the product price. */
 const SHIPPING_CTX = /\bshipping\b|\bdelivery\b|\b\+\s*\$[\d.,]+\s*(?:shipping|delivery)/i;
@@ -75,7 +76,10 @@ function perUnitPrice(el: Element, warnings: string[]): boolean {
   }
   // Fallback: "$0.27 / count|oz|item|fl oz" sitting next to the price node.
   const local = `${text(el.parentElement)} ${text(el.nextElementSibling)}`;
-  if (/\/\s*(?:count|oz|fl\.?\s*oz|item|each|ct)\b/i.test(local) || /\bper\s+(?:count|oz|item|each)\b/i.test(local)) {
+  if (
+    /\/\s*(?:count|oz|fl\.?\s*oz|item|each|ct)\b/i.test(local) ||
+    /\bper\s+(?:count|oz|item|each)\b/i.test(local)
+  ) {
     warnings.push("per-unit price ignored");
     return true;
   }
@@ -149,11 +153,7 @@ function sponsoredPrice(el: Element, warnings: string[]): boolean {
   return false;
 }
 
-function isContaminated(
-  el: Element,
-  self: Set<string>,
-  warnings: string[],
-): boolean {
+function isContaminated(el: Element, self: Set<string>, warnings: string[]): boolean {
   return (
     foreignAsin(el, self, warnings) ||
     perUnitPrice(el, warnings) ||
@@ -166,21 +166,14 @@ function isContaminated(
   );
 }
 
-type PriceOutcome =
-  | { kind: "ok"; cents: number }
-  | { kind: "none" }
-  | { kind: "ambiguous" };
+type PriceOutcome = { kind: "ok"; cents: number } | { kind: "none" } | { kind: "ambiguous" };
 
 /**
  * Collect candidate primary prices. Prefer NO PRICE / ambiguous over a wrong
  * price when unit, coupon, installment, SNS, used, shipping, or strikethrough
  * amounts compete with (or replace) a real buy-box cash price.
  */
-function extractPrice(
-  doc: Document,
-  warnings: string[],
-  self: Set<string>,
-): PriceOutcome {
+function extractPrice(doc: Document, warnings: string[], self: Set<string>): PriceOutcome {
   const candidates = new Map<number, { sns: boolean }>();
 
   const consider = (cents: number, el: Element) => {

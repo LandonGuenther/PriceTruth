@@ -239,8 +239,7 @@ export async function handleMessage(
   if (msg.type === "pt/retry") {
     const state = await getState(deps, msg.tabId);
     const observation =
-      state &&
-      (state.status === "error" || state.status === "ready" || state.status === "loading")
+      state && (state.status === "error" || state.status === "ready" || state.status === "loading")
         ? state.observation
         : undefined;
     if (observation) {

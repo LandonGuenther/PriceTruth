@@ -1,6 +1,6 @@
 # Browser Extension (MV3)
 
-`apps/extension`  -  Chrome MV3 side-panel extension. A content script extracts a
+`apps/extension` - Chrome MV3 side-panel extension. A content script extracts a
 `RetailerObservation` on supported product pages (Amazon, Best Buy); a service
 worker posts it to the API, then pulls analysis + history into per-tab state
 (`chrome.storage.session`); the side panel renders it.
@@ -26,16 +26,16 @@ product page repopulates it via the observer); this also means Amazon's ghost
 `loading` events after page load cannot wipe a ready panel. A state of
 `loading` (ingest in flight) is never reset by the ping check.
 
-We deliberately do not use the `tabs` permission  -  it would expose the URLs of
+We deliberately do not use the `tabs` permission - it would expose the URLs of
 all tabs and shows users a "read your browsing history" warning. Without it,
 `changeInfo.url` is never delivered, hence the ping design. The ping is also
 why navigating from a product page to a supported host's non-product page (e.g.
-the Amazon home page) reports `not_product_page`  -  the content script stays
+the Amazon home page) reports `not_product_page` - the content script stays
 injected and tells the panel directly.
 
 ## Environment
 
-`VITE_API_BASE_URL` (build-time) sets the API origin  -  it becomes the only
+`VITE_API_BASE_URL` (build-time) sets the API origin - it becomes the only
 `host_permission`. Default `http://127.0.0.1:3000` (see `.env.example`).
 Production builds must set it to the deployed API origin.
 
@@ -55,7 +55,7 @@ Production builds must set it to the deployed API origin.
 | Permission / capability            | Why                                                                                                                         |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `sidePanel`                        | Show the analysis panel when the toolbar action is clicked.                                                                 |
-| `storage`                          | `chrome.storage.session` holds per-tab `TabState`  -  in-memory only, cleared with the session; nothing is persisted to disk. |
+| `storage`                          | `chrome.storage.session` holds per-tab `TabState` - in-memory only, cleared with the session; nothing is persisted to disk. |
 | `host_permissions: <API origin>/*` | The service worker calls the PriceTruth API.                                                                                |
 | `content_scripts.matches`          | Read-only DOM extraction on Amazon/Best Buy product pages.                                                                  |
 
@@ -69,18 +69,18 @@ Method used to verify the extension end-to-end against live pages:
 
 1. Start the API and DB (`pnpm --filter @pricetruth/api start`, `docker compose up -d db`).
 2. Load `apps/extension/dist` unpacked and open the side panel.
-3. Visit supported product pages one at a time (~8s apart  -  be polite).
+3. Visit supported product pages one at a time (~8s apart - be polite).
 4. For each page, check that a `PriceObservation` row appeared
    (`select o."priceCents", o."referencePriceCents" from "PriceObservation" o
 join "Listing" l on l.id = o."listingId" where l."externalId" = '<id>'
 order by o."observedAt" desc limit 1;`) and that
    `GET /v1/listings/<retailer>/<id>/analysis` returns 200. With only a handful
-   of observations, expect `confidence: "INSUFFICIENT"` and null scores  -  that
+   of observations, expect `confidence: "INSUFFICIENT"` and null scores - that
    is correct.
 
 Known Amazon behaviors seen live (all expected, not bugs):
 
-- Some product pages render no price at all  -  "add to cart to see price" or
+- Some product pages render no price at all - "add to cart to see price" or
   "See All Buying Options" walls, or thin renders. The adapter reports
   `no_price`/`not_product_page`, nothing is recorded.
 - Sustained browsing triggers Amazon `503 Service Unavailable` pages; no

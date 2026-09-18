@@ -32,9 +32,7 @@
       "name": "sidepanel_storage_updates_amazon",
       "pass": true,
       "detail": {
-        "keys": [
-          "tab:594546828"
-        ],
+        "keys": ["tab:594546828"],
         "tabStates": [
           {
             "key": "tab:594546828",

@@ -124,16 +124,16 @@ function firstOffer(product: JsonLdProduct | null) {
 }
 
 /** Copy that marks a dollar amount as financing / month, not cash price. */
-const FINANCING_CTX = /\/\s*mo(?:nth)?\b|\bper\s+month\b|\b\d+\s+months?\b|\bfinancing\b|\baffirm\b/i;
+const FINANCING_CTX =
+  /\/\s*mo(?:nth)?\b|\bper\s+month\b|\b\d+\s+months?\b|\bfinancing\b|\baffirm\b/i;
 
-type PriceOutcome =
-  | { kind: "ok"; cents: number }
-  | { kind: "none" }
-  | { kind: "ambiguous" };
+type PriceOutcome = { kind: "ok"; cents: number } | { kind: "none" } | { kind: "ambiguous" };
 
 function looksLikeFinancing(el: Element | null): boolean {
   if (!el) return false;
-  const host = el.closest('[data-testid="price-block"], [data-testid*="financ" i], [class*="financ" i]') ?? el.parentElement;
+  const host =
+    el.closest('[data-testid="price-block"], [data-testid*="financ" i], [class*="financ" i]') ??
+    el.parentElement;
   return FINANCING_CTX.test(text(host).replace(/\s+/g, " "));
 }
 

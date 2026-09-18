@@ -1,11 +1,7 @@
 import type { RetailerId, RetailerObservation } from "@pricetruth/shared";
 
 export type ExtractionFailureReason =
-  | "not_product_page"
-  | "no_identifier"
-  | "no_price"
-  | "ambiguous_price"
-  | "invalid";
+  "not_product_page" | "no_identifier" | "no_price" | "ambiguous_price" | "invalid";
 
 export type ExtractionResult =
   | { ok: true; observation: RetailerObservation; warnings: string[] }

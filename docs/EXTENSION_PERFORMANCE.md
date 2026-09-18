@@ -2,12 +2,12 @@
 
 Measured on this branch after production-shaped build (`VITE_API_BASE_URL=https://api.example.com`):
 
-| Artifact | Approx size |
-| --- | --- |
-| `content.js` | ~73 KB (~19 KB gzip) |
+| Artifact            | Approx size           |
+| ------------------- | --------------------- |
+| `content.js`        | ~73 KB (~19 KB gzip)  |
 | `service-worker.js` | ~10 KB (~3.5 KB gzip) |
-| `sidepanel.js` | ~158 KB (~51 KB gzip) |
-| release zip | ~90 KB |
+| `sidepanel.js`      | ~158 KB (~51 KB gzip) |
+| release zip         | ~90 KB                |
 
 ## Runtime budgets (design)
 

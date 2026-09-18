@@ -342,8 +342,9 @@ describe("handleNavigationStart", () => {
   });
 
   it("overlapping navigation cancels the prior timer; only latest epoch pings", async () => {
-    const { deps, store, scheduled, cancelledHandles, pingCalls, flags, flushScheduled } =
-      makeDeps({});
+    const { deps, store, scheduled, cancelledHandles, pingCalls, flags, flushScheduled } = makeDeps(
+      {},
+    );
     flags.pingResult = false;
     store.set(tabStateKey(20), ready);
 

@@ -60,18 +60,18 @@ Limited public beta is not release-ready until ops staging URL exists and live-r
 
 ## Test totals (re-run 2026-09-11)
 
-| Suite | Result |
-| --- | --- |
-| Extension | **50** passed |
-| Retailer adapters | **115** passed |
-| Amazon fixtures | **23** |
-| Best Buy fixtures | **15** |
-| Shared / catalog / scoring | 17 / 16 / 39 passed |
-| API | **132** passed (includes migration Path A/B) |
-| `pnpm lint` | pass |
-| `pnpm typecheck` | pass |
-| `pnpm build` | pass |
-| `pnpm test` (full monorepo) | **pass** |
+| Suite                       | Result                                       |
+| --------------------------- | -------------------------------------------- |
+| Extension                   | **50** passed                                |
+| Retailer adapters           | **115** passed                               |
+| Amazon fixtures             | **23**                                       |
+| Best Buy fixtures           | **15**                                       |
+| Shared / catalog / scoring  | 17 / 16 / 39 passed                          |
+| API                         | **132** passed (includes migration Path A/B) |
+| `pnpm lint`                 | pass                                         |
+| `pnpm typecheck`            | pass                                         |
+| `pnpm build`                | pass                                         |
+| `pnpm test` (full monorepo) | **pass**                                     |
 
 Note: full `pnpm test` truncates the DEV API database. Re-run fixture Chrome E2E after gates if DB evidence is needed.
 
@@ -93,17 +93,17 @@ Extension id: `hkpcfcjmogoaakoemandjkkdgnhpdejk`. Dist host_permissions: `http:/
 
 Checklist:
 
-| Check | Result |
-| --- | --- |
-| Extension installs (loadUnpacked) | PASS |
-| Side panel opens | PASS |
-| Amazon fixture `B0DEMOASIN` extracts ($299 / list $499) | PASS |
-| Best Buy fixture `6418599` extracts ($279.99 / was $399.99) | PASS |
-| Observation reaches API/DB | PASS (amazon 29900, bestbuy 27999, B0TYPICALX 4499) |
-| Analysis returns | PASS (`confidence.level=INSUFFICIENT`, dealScore present) |
-| Side panel updates | PASS (ready states for A/BB/B; ambiguous UI) |
-| Ambiguous `B0AMBIGPR1` never POSTs | PASS (DB count stayed 0; panel: nothing recorded) |
-| Nav Product A → B no stale A | PASS (tab state `B0TYPICALX` ready; not showing `B0DEMOASIN`) |
+| Check                                                       | Result                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
+| Extension installs (loadUnpacked)                           | PASS                                                          |
+| Side panel opens                                            | PASS                                                          |
+| Amazon fixture `B0DEMOASIN` extracts ($299 / list $499)     | PASS                                                          |
+| Best Buy fixture `6418599` extracts ($279.99 / was $399.99) | PASS                                                          |
+| Observation reaches API/DB                                  | PASS (amazon 29900, bestbuy 27999, B0TYPICALX 4499)           |
+| Analysis returns                                            | PASS (`confidence.level=INSUFFICIENT`, dealScore present)     |
+| Side panel updates                                          | PASS (ready states for A/BB/B; ambiguous UI)                  |
+| Ambiguous `B0AMBIGPR1` never POSTs                          | PASS (DB count stayed 0; panel: nothing recorded)             |
+| Nav Product A → B no stale A                                | PASS (tab state `B0TYPICALX` ready; not showing `B0DEMOASIN`) |
 
 Artifacts (agent run):
 
