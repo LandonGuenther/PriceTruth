@@ -30,12 +30,8 @@ export function Panel({
       <Header />
       <LiveStatus state={state} />
       {state.status === "idle" && <EmptyStates kind="idle" />}
-      {state.status === "unsupported" && (
-        <EmptyStates kind="unsupported" reason={state.reason} />
-      )}
-      {state.status === "ambiguous" && (
-        <EmptyStates kind="ambiguous" message={state.message} />
-      )}
+      {state.status === "unsupported" && <EmptyStates kind="unsupported" reason={state.reason} />}
+      {state.status === "ambiguous" && <EmptyStates kind="ambiguous" message={state.message} />}
       {state.status === "loading" && (
         <>
           <ProductHeading observation={state.observation} />

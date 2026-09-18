@@ -1,0 +1,70 @@
+name: staging-jobs
+
+# MANUAL FALLBACK ONLY. The real scheduler is Fly scheduled Machines
+# (pricetruth-rollup hourly / pricetruth-archive daily / pricetruth-bestbuy-refresh
+# daily — created and refreshed by scripts/fly-schedule-jobs.sh). Use this
+# workflow_dispatch to re-run a single job by hand.
+# Requires repository secrets:
+#   FLY_API_TOKEN
+#   FLY_APP_NAME   (defaults to pricetruth-api-staging if unset via env below)
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job to run"
+        required: true
+        default: "rollup"
+        type: choice
+        options:
+          - rollup
+          - archive
+          - bestbuy-refresh
+
+permissions:
+  contents: read
+
+jobs:
+  run-job:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.FLY_API_TOKEN != '' }}
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_APP: ${{ secrets.FLY_APP_NAME }}
+    steps:
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Select job
+        id: select
+        run: |
+          set -u
+          app="${FLY_APP:-pricetruth-api-staging}"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          job="${{ github.event.inputs.job }}"
+          if [ -z "$job" ]; then
+            echo "job input required (workflow_dispatch only)"; exit 1
+          fi
+          echo "job=$job" >> "$GITHUB_OUTPUT"
+          echo "selected job: $job on $app"
+
+      - name: Execute job on Fly machine
+        run: |
+          set -u
+          job="${{ steps.select.outputs.job }}"
+          app="${{ steps.select.outputs.app }}"
+          # Machine WORKDIR is /app/apps/api (see Dockerfile).
+          case "$job" in
+            rollup)
+              cmd='pnpm jobs rollup'
+              ;;
+            archive)
+              cmd='pnpm jobs archive'
+              ;;
+            bestbuy-refresh)
+              cmd='pnpm jobs bestbuy-refresh --min-age-hours 6 --max-listings 200'
+              ;;
+            *)
+              echo "unknown job: $job"; exit 1
+              ;;
+          esac
+          flyctl ssh console -a "$app" -C "$cmd"

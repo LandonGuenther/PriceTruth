@@ -5,7 +5,7 @@ import {
 } from "@pricetruth/shared";
 import { ADAPTER_VERSION } from "../index.js";
 import type { ExtractionResult, RetailerAdapter } from "../types.js";
-import { AMAZON_SELECTORS as S, HIDDEN_PRICE_TEXT } from "./selectors.js";
+import { AMAZON_SELECTORS as S, HIDDEN_PRICE_TEXT, SNS_CTX } from "./selectors.js";
 
 const PATH_ID = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})/;
 
@@ -14,7 +14,8 @@ const INSTALLMENT_CTX =
   /\/\s*mo(?:nth)?\b|\bper\s+month\b|\b\d+\s+months?\b|\binstallment|financing|affirm|with\s+prime\s+visa/i;
 
 /** Nearby copy that marks a dollar amount as coupon savings, not the product price. */
-const COUPON_CTX = /\bwith\s+coupon\b|\bclip\s+coupon\b|\bcoupon\s+applied\b|\bsave\s+\$[\d.]+\s+with\s+coupon\b/i;
+const COUPON_CTX =
+  /\bwith\s+coupon\b|\bclip\s+coupon\b|\bcoupon\s+applied\b|\bsave\s+\$[\d.]+\s+with\s+coupon\b/i;
 
 /** Nearby copy that marks a dollar amount as shipping, not the product price. */
 const SHIPPING_CTX = /\bshipping\b|\bdelivery\b|\b\+\s*\$[\d.,]+\s*(?:shipping|delivery)/i;
@@ -75,7 +76,10 @@ function perUnitPrice(el: Element, warnings: string[]): boolean {
   }
   // Fallback: "$0.27 / count|oz|item|fl oz" sitting next to the price node.
   const local = `${text(el.parentElement)} ${text(el.nextElementSibling)}`;
-  if (/\/\s*(?:count|oz|fl\.?\s*oz|item|each|ct)\b/i.test(local) || /\bper\s+(?:count|oz|item|each)\b/i.test(local)) {
+  if (
+    /\/\s*(?:count|oz|fl\.?\s*oz|item|each|ct)\b/i.test(local) ||
+    /\bper\s+(?:count|oz|item|each)\b/i.test(local)
+  ) {
     warnings.push("per-unit price ignored");
     return true;
   }
@@ -138,7 +142,16 @@ function usedOrMarketplacePrice(el: Element, warnings: string[]): boolean {
 }
 
 function snsPrice(el: Element): boolean {
-  return Boolean(el.closest(S.snsContainers));
+  return Boolean(el.closest(S.snsContainers)) || SNS_CTX.test(localText(el));
+}
+
+/** display:none / hidden price elements are never the visible product price. */
+function hiddenPrice(el: Element, warnings: string[]): boolean {
+  if (el.closest(S.hiddenContainers)) {
+    warnings.push("hidden price element ignored");
+    return true;
+  }
+  return false;
 }
 
 function sponsoredPrice(el: Element, warnings: string[]): boolean {
@@ -149,11 +162,7 @@ function sponsoredPrice(el: Element, warnings: string[]): boolean {
   return false;
 }
 
-function isContaminated(
-  el: Element,
-  self: Set<string>,
-  warnings: string[],
-): boolean {
+function isContaminated(el: Element, self: Set<string>, warnings: string[]): boolean {
   return (
     foreignAsin(el, self, warnings) ||
     perUnitPrice(el, warnings) ||
@@ -162,25 +171,19 @@ function isContaminated(
     couponPrice(el, warnings) ||
     shippingPrice(el, warnings) ||
     usedOrMarketplacePrice(el, warnings) ||
-    sponsoredPrice(el, warnings)
+    sponsoredPrice(el, warnings) ||
+    hiddenPrice(el, warnings)
   );
 }
 
-type PriceOutcome =
-  | { kind: "ok"; cents: number }
-  | { kind: "none" }
-  | { kind: "ambiguous" };
+type PriceOutcome = { kind: "ok"; cents: number } | { kind: "none" } | { kind: "ambiguous" };
 
 /**
  * Collect candidate primary prices. Prefer NO PRICE / ambiguous over a wrong
  * price when unit, coupon, installment, SNS, used, shipping, or strikethrough
  * amounts compete with (or replace) a real buy-box cash price.
  */
-function extractPrice(
-  doc: Document,
-  warnings: string[],
-  self: Set<string>,
-): PriceOutcome {
+function extractPrice(doc: Document, warnings: string[], self: Set<string>): PriceOutcome {
   const candidates = new Map<number, { sns: boolean }>();
 
   const consider = (cents: number, el: Element) => {
@@ -217,6 +220,18 @@ function extractPrice(
       warnings.push("price hidden until add-to-cart");
     } else {
       warnings.push("no price element matched");
+    }
+    return { kind: "none" };
+  }
+
+  // Never adopt a Subscribe & Save price as the one-time price: when every
+  // surviving candidate is SnS-tagged, report no price (this includes the
+  // single-candidate case).
+  const entriesAll = [...candidates.entries()];
+  if (entriesAll.length > 0 && entriesAll.every(([, meta]) => meta.sns)) {
+    warnings.push("only subscribe-and-save price found");
+    if (HIDDEN_PRICE_TEXT.test(text(doc.querySelector(S.hiddenPriceRegions)))) {
+      warnings.push("price hidden until add-to-cart");
     }
     return { kind: "none" };
   }

@@ -1,4 +1,32 @@
 import type { PrismaClient } from "@prisma/client";
+import { setObservationStatus } from "./services/observationService.js";
+
+/**
+ * Owner correction tool backing `pnpm ops exclude`. Flips an observation to
+ * EXCLUDED through setObservationStatus (the only sanctioned mutation path —
+ * appends an ObservationStatusEvent with actor "owner-cli"). Refuses when the
+ * row is already EXCLUDED.
+ */
+export async function excludeObservation(
+  prisma: PrismaClient,
+  observationId: bigint,
+  reason: string,
+): Promise<{ id: string; before: string; after: string }> {
+  const current = await prisma.priceObservation.findUnique({
+    where: { id: observationId },
+    select: { status: true },
+  });
+  if (!current) throw new Error(`observation ${observationId} not found`);
+  if (current.status === "EXCLUDED") {
+    throw new Error(`observation ${observationId} is already EXCLUDED`);
+  }
+  await setObservationStatus(prisma, observationId, "EXCLUDED", reason, "owner-cli");
+  const after = await prisma.priceObservation.findUniqueOrThrow({
+    where: { id: observationId },
+    select: { status: true },
+  });
+  return { id: observationId.toString(), before: current.status, after: after.status };
+}
 
 /** Ops status payload shared by GET /internal/status and `pnpm ops status`. */
 export async function getOpsStatus(prisma: PrismaClient) {

@@ -93,9 +93,12 @@ Corrections are expressed as new observations. See ADR-001.
 ## Dedup rule
 
 An incoming observation is rejected as a duplicate (HTTP 200,
-`duplicate: true`) when an existing row for the same listing has identical
-`priceCents`, `referencePriceCents` (null-equal), `currency` and `dataSourceId`,
-and an `effectiveAt` within ±60 minutes of the incoming `effectiveAt`. `status`
+`duplicate: true`) only when the **latest** row for the same listing +
+`dataSourceId` (by `effectiveAt`, then id) has identical `priceCents`,
+`referencePriceCents` (null-equal) and `currency`, and its `effectiveAt` is
+within ±60 minutes of the incoming `effectiveAt`. A price returning to an
+earlier value (A → B → A within the window) inserts a new row — the newest row
+is what the page shows now. `status`
 is excluded from dedup — a quarantined identical row is still the same event.
 
 ## Eligibility

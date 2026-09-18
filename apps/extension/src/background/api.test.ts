@@ -204,10 +204,13 @@ describe("ApiClient", () => {
   it("throws ApiRateLimitedError with retryAfterSeconds on 429 (no retry)", async () => {
     const spy = vi.fn(() =>
       Promise.resolve(
-        new Response(JSON.stringify({ error: "rate_limited", message: "slow down", retryAfterSeconds: 7 }), {
-          status: 429,
-          headers: { "content-type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ error: "rate_limited", message: "slow down", retryAfterSeconds: 7 }),
+          {
+            status: 429,
+            headers: { "content-type": "application/json" },
+          },
+        ),
       ),
     );
     vi.stubGlobal("fetch", spy);
@@ -289,9 +292,9 @@ describe("response parsers", () => {
       enrichment: { bestbuyApi: "skipped" },
     });
     expect(() => parseIngestResponse({ accepted: true })).toThrow(ApiMalformedError);
-    expect(() =>
-      parseIngestResponse({ ...ingestOk, enrichment: { bestbuyApi: 1 } }),
-    ).toThrow(ApiMalformedError);
+    expect(() => parseIngestResponse({ ...ingestOk, enrichment: { bestbuyApi: 1 } })).toThrow(
+      ApiMalformedError,
+    );
   });
 
   it("parseAnalysisResponse tolerates unknown fields and missing evidence", () => {

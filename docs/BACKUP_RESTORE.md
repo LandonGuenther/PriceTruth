@@ -36,8 +36,21 @@ OK: backup restored and readable.
 (Full transcript: the script was run with `USE_DOCKER=1` against the compose
 `db` service on 2026-09-11.)
 
+## Neon staging (PITR) — verified 2026-09-18
+
+Restore was verified end-to-end on the live staging project: created a Neon
+point-in-time branch `restore-verify-20260918` at
+`parent_timestamp=2026-09-17T23:57:17Z`, queried it (13 observations, 11
+listings, 8 `_prisma_migrations` rows, PG 16.15, 8.5 MB) matching live, then
+deleted the branch. Cost $0.
+
+**Caveat:** the Neon free plan caps `history_retention` at 6 h (21600 s) — the
+PITR window is **6 hours**, not days. Recovery older than 6 h relies on the
+parquet observation archive (replay path FUTURE).
+
 ## Retention / scheduling
 
-FUTURE — when a real deployment exists, schedule dumps (e.g. daily, retained
-30 days) and store them alongside the parquet archive bucket, not on the DB
-volume.
+FUTURE — schedule dumps (e.g. daily, retained 30 days) and store them
+alongside the parquet archive, not on the DB volume. Neon free-plan PITR (6 h)
+covers only very recent mistakes; scheduled `pg_dump` remains the durable
+answer.

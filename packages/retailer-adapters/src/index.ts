@@ -9,7 +9,7 @@ export { AMAZON_SELECTORS } from "./amazon/selectors.js";
 export { BESTBUY_SELECTORS } from "./bestbuy/selectors.js";
 
 /** Adapter/schema version emitted as `extractorVersion`; bump on selector changes. */
-export const ADAPTER_VERSION = "1.2.0";
+export const ADAPTER_VERSION = "1.2.1";
 
 export const adapters: RetailerAdapter[] = [amazonAdapter, bestbuyAdapter];
 

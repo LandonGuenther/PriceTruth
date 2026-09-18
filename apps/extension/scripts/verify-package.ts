@@ -28,7 +28,13 @@ function fail(msg: string): never {
 
 if (!existsSync(dist)) fail(`missing dist at ${dist}; run build first`);
 
-const required = ["manifest.json", "service-worker.js", "content.js", "sidepanel.html", "sidepanel.js"];
+const required = [
+  "manifest.json",
+  "service-worker.js",
+  "content.js",
+  "sidepanel.html",
+  "sidepanel.js",
+];
 for (const f of required) {
   if (!existsSync(path.join(dist, f))) fail(`dist missing ${f}`);
 }
@@ -37,7 +43,14 @@ const manifest = JSON.parse(readFileSync(path.join(dist, "manifest.json"), "utf8
   host_permissions?: string[];
   permissions?: string[];
 };
-const bannedPerms = new Set(["tabs", "history", "cookies", "webRequest", "webNavigation", "scripting"]);
+const bannedPerms = new Set([
+  "tabs",
+  "history",
+  "cookies",
+  "webRequest",
+  "webNavigation",
+  "scripting",
+]);
 for (const p of manifest.permissions ?? []) {
   if (bannedPerms.has(p)) fail(`manifest must not include permission: ${p}`);
 }
@@ -51,7 +64,9 @@ for (const hp of hostPerms) {
 }
 
 if (!existsSync(zipPath)) {
-  console.log("verify-package: zip missing; build with VITE_API_BASE_URL set to a non-localhost origin, then package.");
+  console.log(
+    "verify-package: zip missing; build with VITE_API_BASE_URL set to a non-localhost origin, then package.",
+  );
   fail(`zip not found at ${zipPath}`);
 }
 
@@ -72,7 +87,9 @@ for (const entry of entries) {
 }
 
 // Ensure the packaged manifest does not point host permissions at loopback.
-const zipManifestRaw = execFileSync("unzip", ["-p", zipPath, "manifest.json"], { encoding: "utf8" });
+const zipManifestRaw = execFileSync("unzip", ["-p", zipPath, "manifest.json"], {
+  encoding: "utf8",
+});
 const zipManifest = JSON.parse(zipManifestRaw) as { host_permissions?: string[] };
 for (const hp of zipManifest.host_permissions ?? []) {
   if (/localhost|127\.0\.0\.1|\[::1\]/i.test(hp)) {
@@ -80,4 +97,6 @@ for (const hp of zipManifest.host_permissions ?? []) {
   }
 }
 
-console.log(`verify-package: ok (${entries.length} entries, ${statSync(zipPath).size} bytes) -> ${zipPath}`);
+console.log(
+  `verify-package: ok (${entries.length} entries, ${statSync(zipPath).size} bytes) -> ${zipPath}`,
+);

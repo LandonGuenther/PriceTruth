@@ -121,9 +121,12 @@ Response 201:
 existing row's status, which may be `QUARANTINED` or already `CORROBORATED`.
 
 `observationId` is the row's BIGINT key serialised as a decimal string (JSON has
-no 64-bit integer). Duplicates (same price/reference/currency/dataSource within
-±60 min of `effectiveAt`) return 200 with `duplicate: true` and the existing
-`observationId`.
+no 64-bit integer). An observation is a duplicate only when the **latest**
+existing row for the same listing + dataSource (by `effectiveAt`, then id) has
+the same price/reference/currency and its `effectiveAt` is within ±60 min of the
+incoming one — then 200 with `duplicate: true` and the existing
+`observationId`. A price returning to an earlier value (A → B → A within the
+window) is a **new** row: dedup compares against the newest row only.
 
 For Best Buy observations with `BESTBUY_API_KEY` configured, an enrichment
 observation from the official Products API may be recorded;
@@ -180,6 +183,20 @@ payload mirrors `pnpm --filter @pricetruth/api ops status`:
 `pnpm --filter @pricetruth/api ops status` prints the same JSON as
 `/internal/status` straight from the DB (no auth needed — it already holds
 `DATABASE_URL`).
+
+Read-only inspection subcommands (`pnpm ops <cmd>` from the repo root, JSON
+output, BigInt ids as strings): `recent [--limit N]` (latest observations with
+retailer/externalId/price/status/source/times), `listing <retailer> <externalId>`
+(listing row, linked product + identifiers, variants, identifier assertions, last
+50 observations, `ListingDailyPrice` rows, and the live analysis result),
+`quarantined [--limit N]` (QUARANTINED/EXCLUDED observations with their latest
+status-event reason) and `jobs [--limit N]` (recent `JobRun` rows + all
+`JobCheckpoint` rows incl. lease fields). `remote` (`pnpm ops:status`) needs no
+`DATABASE_URL`: it GETs `/health`, `/readiness` and — when `INTERNAL_API_TOKEN`
+is set — `/internal/status` at `PRICETRUTH_API_URL`, prints statuses + bodies
+(never the token) and exits 1 unless readiness is 200. The `staging-canary`
+workflow runs the same probes every 6 hours and fails when the newest
+observation is older than 48 h (skips when `STAGING_API_URL` is unset).
 
 ## Container
 

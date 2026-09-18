@@ -3,14 +3,16 @@
  *
  *   pnpm --filter @pricetruth/api jobs rollup [--batch-size 5000]
  *   pnpm --filter @pricetruth/api jobs archive [--dir <path>] [--max-batches N] [--dry-run]
+ *   pnpm --filter @pricetruth/api jobs bestbuy-refresh [--min-age-hours H] [--max-listings N]
  *
  * The archive backend is selected by ARCHIVE_BACKEND (local | s3); --dir
- * overrides ARCHIVE_LOCAL_DIR for the local backend. Both jobs run under a
+ * overrides ARCHIVE_LOCAL_DIR for the local backend. All jobs run under a
  * JobCheckpoint lease + JobRun ledger (src/jobs/runner.ts).
  */
 import { PrismaClient } from "@prisma/client";
 import { loadConfig } from "../src/config.js";
 import { runDailyRollupJob } from "../src/jobs/dailyRollup.js";
+import { runBestBuyRefreshJob, type BestBuyRefreshSummary } from "../src/jobs/bestbuyRefresh.js";
 import { runJob } from "../src/jobs/runner.js";
 import { exportObservationBatches } from "../src/archive/exporter.js";
 import { LocalFilesystemArchive } from "../src/archive/localFilesystem.js";
@@ -78,6 +80,28 @@ async function main() {
     console.log(
       `archive${dryRun ? " (dry-run)" : ""}: ${r.batches} batch(es) ` +
         `(${r.rows} rows exported, ${r.skipped} existing batch(es) skipped) → ${destination}`,
+    );
+  } else if (cmd === "bestbuy-refresh") {
+    const apiKey = config.BESTBUY_API_KEY;
+    if (!apiKey) {
+      console.log("bestbuy-refresh: disabled (BESTBUY_API_KEY not set)");
+      return;
+    }
+    const minAgeHours =
+      flag("min-age-hours") === undefined ? undefined : Number(flag("min-age-hours"));
+    const maxListings =
+      flag("max-listings") === undefined ? undefined : Number(flag("max-listings"));
+    const out = await runJob(prisma, "bestbuy-refresh", ({ signal, heartbeat }) =>
+      runBestBuyRefreshJob(prisma, { apiKey, minAgeHours, maxListings, signal, heartbeat }),
+    );
+    if (out.skipped) {
+      console.log("bestbuy-refresh: skipped — lease held by another worker");
+      return;
+    }
+    const r = out.summary as BestBuyRefreshSummary;
+    console.log(
+      `bestbuy-refresh: ${r.candidates} candidate(s) — ${r.recorded} recorded, ` +
+        `${r.duplicate} duplicate, ${r.error} error, ${r.skipped} skipped (fresh)`,
     );
   } else {
     throw new Error(`unknown job: ${cmd}`);

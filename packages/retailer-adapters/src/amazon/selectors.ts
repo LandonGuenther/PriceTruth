@@ -57,7 +57,12 @@ export const AMAZON_SELECTORS = {
     "#usedBuySection, #olpLinkWidget_feature_div, #buybox-accordion #usedAccordionRow, [id*='usedBuy' i], [data-asin-condition-code]",
   /** Subscribe & Save / recurring price hosts. */
   snsContainers:
-    "#snsAccordionRow, #subscribeAccordion, #sns-base-price, [id*='sns' i][class*='price' i], .snsPriceBlock",
+    "#snsAccordionRow, #subscribeAccordion, #sns-base-price, #sns-tiered-price, [id^='sns-'], [id*='sns' i][class*='price' i], .snsPriceBlock, .apex-pricetopay-accessibility-label",
+  /**
+   * Elements Amazon hides from the rendered page (display:none etc.) - their
+   * prices must never be adopted (e.g. the hidden SnS tier block).
+   */
+  hiddenContainers: ".aok-hidden, [hidden], [style*='display:none'], [style*='display: none']",
   /** Sponsored / cross-sell carousels (in addition to foreign-ASIN checks). */
   sponsoredContainers:
     "[data-component-type='sp-sponsored-result'], .AdHolder, #sponsoredProducts2_feature_div, #sp_detail, .sp_desktop_sponsored_label",
@@ -94,4 +99,7 @@ export const AMAZON_SELECTORS = {
  * behind add-to-cart ("To see our price, add this item to your cart.").
  */
 export const HIDDEN_PRICE_TEXT =
-  /see (?:our )?price in cart|add (?:this item )?to (?:your )?cart to see (?:our )?price|price (?:is )?unavailable|see (?:our )?price[^.]*cart/i;
+  /see (?:our )?price in cart|add (?:this item )?to (?:your )?cart to see (?:our )?price|price (?:is )?unavailable|see (?:our )?price[^.]*cart|see product details[^.]*cart/i;
+
+/** Text local to a price node that marks it as a Subscribe & Save price. */
+export const SNS_CTX = /subscribe\s*&\s*save|subscribe and save|percent savings|with \d+% savings/i;

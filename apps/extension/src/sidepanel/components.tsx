@@ -175,10 +175,7 @@ export function HistoryChart({
   recordedLowCents: number | null;
 }): React.JSX.Element | null {
   const [window, setWindow] = useState<ChartWindow>("90");
-  const points = useMemo(
-    () => filterDailyByWindow(history.daily, window),
-    [history.daily, window],
-  );
+  const points = useMemo(() => filterDailyByWindow(history.daily, window), [history.daily, window]);
   if (history.daily.length === 0) return null;
 
   const W = 360;

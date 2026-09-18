@@ -69,9 +69,7 @@ export class ApiUnsupportedVersionError extends Error {
     public readonly serverMajor: number,
     public readonly clientMajor: number,
   ) {
-    super(
-      `API schema major ${serverMajor} is newer than this client (supports ${clientMajor})`,
-    );
+    super(`API schema major ${serverMajor} is newer than this client (supports ${clientMajor})`);
     this.name = "ApiUnsupportedVersionError";
   }
 }
@@ -170,7 +168,10 @@ export function parseIngestResponse(body: unknown): IngestResponse {
   return result;
 }
 
-function parseScoreResult(v: unknown, path: string): {
+function parseScoreResult(
+  v: unknown,
+  path: string,
+): {
   score: number | null;
   label: string;
   reasons: string[];
@@ -306,7 +307,10 @@ export function parseHistoryResponse(body: unknown): HistoryResponse {
       ...(p as HistoryResponse["points"][number]),
       effectiveAt: requireString(p.effectiveAt, `points[${i}].effectiveAt`),
       priceCents: requireNumber(p.priceCents, `points[${i}].priceCents`),
-      referencePriceCents: optionalNumber(p.referencePriceCents, `points[${i}].referencePriceCents`),
+      referencePriceCents: optionalNumber(
+        p.referencePriceCents,
+        `points[${i}].referencePriceCents`,
+      ),
       source: requireString(p.source, `points[${i}].source`),
     };
   });

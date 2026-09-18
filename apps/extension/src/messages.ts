@@ -6,11 +6,7 @@ import type {
 } from "@pricetruth/shared";
 
 export type ExtractionFailureReason =
-  | "not_product_page"
-  | "no_identifier"
-  | "no_price"
-  | "ambiguous_price"
-  | "invalid";
+  "not_product_page" | "no_identifier" | "no_price" | "ambiguous_price" | "invalid";
 
 export type ContentToBackground =
   | { type: "pt/observation"; observation: RetailerObservation; warnings?: string[] }
@@ -24,8 +20,7 @@ export type ContentToBackground =
 
 /** Sent by the side panel to re-run the last observation for a tab. */
 export type PanelToBackground =
-  | { type: "pt/retry"; tabId: number }
-  | { type: "pt/set-diagnostics"; enabled: boolean };
+  { type: "pt/retry"; tabId: number } | { type: "pt/set-diagnostics"; enabled: boolean };
 
 /** Sent background → content to check the content script is alive on this tab. */
 export type BackgroundToContent = { type: "pt/ping" };
@@ -77,7 +72,14 @@ export type TabState =
       observation?: RetailerObservation;
       message: string;
       updatedAt: string;
-      kind: "network" | "api" | "timeout" | "malformed" | "unsupported_version" | "rate_limited" | "unknown";
+      kind:
+        | "network"
+        | "api"
+        | "timeout"
+        | "malformed"
+        | "unsupported_version"
+        | "rate_limited"
+        | "unknown";
       generation?: number;
     };
 

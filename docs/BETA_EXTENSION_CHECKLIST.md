@@ -55,4 +55,4 @@ Use this before inviting 5-10 testers. Mark each item with date and initials.
 
 ## Sign-off
 
-Tester: ________  Date: ________  Build/version: ________  Notes: ________
+Tester: ________ Date: ________ Build/version: ________ Notes: ________
