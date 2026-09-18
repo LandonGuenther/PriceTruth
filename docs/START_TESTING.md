@@ -8,7 +8,7 @@
 | Beta ZIP          | `apps/extension/release/pricetruth-extension-0.1.0.zip`            |
 | Extension version | `0.1.0`                                                            |
 | Extension ID      | `hkpcfcjmogoaakoemandjkkdgnhpdejk`                                 |
-| ZIP SHA-256       | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
+| ZIP SHA-256       | `d7c15fedcea78e487fb47f8b95958e837402401e317ce623fcf0537bbd64b077` |
 
 ## Install (Chrome)
 

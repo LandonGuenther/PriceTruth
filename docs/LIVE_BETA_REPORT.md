@@ -1,7 +1,8 @@
 # Live beta report
 
-Status: **PARTIALLY LIVE** — public Fly API is up against Neon; extension beta ZIP is built;
-awaiting owner GitHub secrets + first real retailer PDP validation in Chrome.
+Status: **LIVE, VALIDATED** — public Fly API (`5859aae`) is up against Neon; extension beta ZIP
+rebuilt at adapter 1.2.1; live Chrome fixture + real-PDP validation done (hidden-price env only).
+No legitimate real observations yet; awaiting owner visible-price + Best Buy PDP checks.
 
 ## STATUS
 
@@ -62,43 +63,49 @@ machine creation (~00:22Z/00:24Z UTC). `staging-jobs.yml` is now a
 
 ## EXTENSION
 
-| Item                 | Value                                                                |
-| -------------------- | -------------------------------------------------------------------- |
-| Version              | `0.1.0`                                                              |
-| Extension ID         | `hkpcfcjmogoaakoemandjkkdgnhpdejk`                                   |
-| Beta artifact        | `apps/extension/release/pricetruth-extension-0.1.0.zip` (gitignored) |
-| SHA-256              | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0`   |
-| API URL baked in     | `https://pricetruth-api-staging.fly.dev`                             |
-| Localhost in package | **None** (verify-package passed)                                     |
+| Item                 | Value                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| Version              | `0.1.0` (adapter `1.2.1`)                                                                      |
+| Extension ID         | `hkpcfcjmogoaakoemandjkkdgnhpdejk`                                                             |
+| Beta artifact        | `apps/extension/release/pricetruth-extension-0.1.0.zip` (gitignored; 12 entries, 90,979 bytes) |
+| SHA-256              | `d7c15fedcea78e487fb47f8b95958e837402401e317ce623fcf0537bbd64b077`                             |
+| API URL baked in     | `https://pricetruth-api-staging.fly.dev`                                                       |
+| Localhost in package | **None** (verify-package passed)                                                               |
+| Deployed API SHA     | `5859aae` (readiness 200: database ok, migrations ok); doc tip = `5859aae` + docs commit       |
 
 ## DATA
 
-<!-- LIVE-VALIDATION-PENDING -->
-
-| Item                                      | Value                                                                                                                                                                      |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First legitimate retailer PDP observation | Not yet                                                                                                                                                                    |
-| Controlled DQ probe                       | ASIN `B0PTDQTEST` — 3 prices ~50000¢ ACCEPTED, one 500¢ QUARANTINED at ingest and excluded from analysis (see `/home/ubuntu/dq-live-test.md` for request/response capture) |
-| Staging probes                            | 2 amazon probe ASINs, `EXCLUDED`                                                                                                                                           |
-| Observations                              | 13 (as of 2026-09-16T22:59Z: ACCEPTED 7, CORROBORATED 2, EXCLUDED 4)                                                                                                       |
-| Listings                                  | 11                                                                                                                                                                         |
-| Retailers                                 | 2                                                                                                                                                                          |
+| Item                                      | Value                                                                                                                                                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First legitimate retailer PDP observation | **NONE yet** — every live row is fixture/synthetic/excluded. Retailers collect (Amazon + Best Buy via extension) only once the owner/testers install the zip                                                  |
+| Fixture-validated observations            | Amazon sale `B0PTLIVE01` 29900/49900; Best Buy `99189999` 27999/39999; unchanged revisit → duplicate (original row kept); changed price → new row (obs 20 → 23)                                               |
+| Real Amazon PDPs tested                   | 4 (`B00MNV8E0C`, `0735211299`, `B00000JHQ6`, `B09XS7JWHH`) — all hid the buy-box price in the test environment → extension correctly POSTed nothing                                                           |
+| Defect 1 (fixed)                          | Adapter 1.2.0 ingested a hidden SnS tier label ($13.00) on `B00MNV8E0C` → obs 18, later set `EXCLUDED` via `pnpm ops exclude 18` (actor `owner-cli`; raw row retained; analysis eligibleCount 0 / excluded 1) |
+| Defect 2 (fixed)                          | Dedup A→B→A within 60 min dropped the return to A — fixed in `5859aae` (dedup only vs the latest row)                                                                                                         |
+| Controlled DQ probe                       | ASIN `B0PTDQTEST` — 3 prices ~50000¢ ACCEPTED, one 500¢ QUARANTINED (`large_move_vs_recent_median`), excluded from history/analysis (`/home/ubuntu/dq-live-test.md`)                                          |
+| Observations                              | 13 + live-test rows (statuses ACCEPTED 7, CORROBORATED 2, EXCLUDED 4+ as of 2026-09-16T22:59Z)                                                                                                                |
+| Listings                                  | 11                                                                                                                                                                                                            |
+| Retailers                                 | 2                                                                                                                                                                                                             |
 
 ## LIVE VALIDATION
 
-| Check                                       | Result                                                  |
-| ------------------------------------------- | ------------------------------------------------------- |
-| Public `/health`                            | 200                                                     |
-| Public `/readiness`                         | 200 (`database=ok`, `migrations=ok`)                    |
-| Internal auth deny/allow                    | 404 unauth/wrong; 200 with token                        |
-| HTTPS observation → Neon → history/analysis | Pass (probe then EXCLUDED)                              |
-| Rollup on Fly                               | Pass (scheduled machine, 8 listing-days recomputed)     |
-| Archive on Fly volume                       | Pass (5 batches via `pricetruth_archive_jobs`)          |
-| Machine restart persistence                 | Pass (counts unchanged; volume intact)                  |
-| Neon PITR restore                           | Pass (branch queried, matched live, deleted)            |
-| Anomaly quarantine end-to-end               | Pass (500¢ probe → QUARANTINED, excluded from analysis) |
-| Best Buy live PDP                           | <!-- LIVE-VALIDATION-PENDING -->                        |
-| Amazon live PDP                             | <!-- LIVE-VALIDATION-PENDING --> (owner Chrome install) |
+| Check                                       | Result                                                                                                                            |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Public `/health`                            | 200                                                                                                                               |
+| Public `/readiness`                         | 200 (`database=ok`, `migrations=ok`)                                                                                              |
+| Internal auth deny/allow                    | 404 unauth/wrong; 200 with token                                                                                                  |
+| HTTPS observation → Neon → history/analysis | Pass (probe then EXCLUDED)                                                                                                        |
+| Rollup on Fly                               | Pass (scheduled machine, 8 listing-days recomputed)                                                                               |
+| Archive on Fly volume                       | Pass (5 batches via `pricetruth_archive_jobs`)                                                                                    |
+| Machine restart persistence                 | Pass (counts unchanged; volume intact)                                                                                            |
+| Neon PITR restore                           | Pass (branch queried, matched live, deleted)                                                                                      |
+| Anomaly quarantine end-to-end               | Pass (500¢ probe → QUARANTINED, excluded from analysis)                                                                           |
+| Extension fixture suite vs live API         | Pass (sale/no-price/hidden-unit-only → nothing POSTed; API-unreachable → Retry; revisit → duplicate; change → new row)            |
+| Amazon live PDP (hidden-price env)          | Pass — 4 real PDPs all hid the buy-box price here; extension correctly POSTed nothing                                             |
+| Amazon live PDP (visible price)             | **UNTESTED** — needs an owner-side normal-priced PDP (this environment only found hidden-price pages)                             |
+| Best Buy live PDP                           | **UNTESTED** — `ERR_HTTP2_PROTOCOL_ERROR` from this host on every attempt; not anti-bot, no transport. Owner manual test required |
+| Rate-limit 429                              | **UNTESTED** — not safely testable via public endpoints                                                                           |
+| Hidden-SnS fix live re-check                | Pass — `B00MNV8E0C` re-visit after 1.2.1: 0 POSTs, history empty                                                                  |
 
 ## TESTS
 
@@ -137,10 +144,18 @@ machine creation (~00:22Z/00:24Z UTC). `staging-jobs.yml` is now a
 4. GitHub Action `staging-canary` (once secrets set)
 5. Neon dashboard project health
 
+## NEXT TESTING STEPS (owner, in order)
+
+1. **Amazon normal price** — install the unpacked zip, open any Amazon PDP showing a normal price → side panel shows the price; confirm via `pnpm ops recent --limit 5` (row with `extension:content-script`) or `pnpm ops listing amazon <ASIN>`.
+2. **Amazon unit-price page** — a PDP with a "$X / count" unit line → verify the unit price is _not_ the observation (`ops listing` should show the pack price or nothing).
+3. **Amazon List-price page** — a PDP with a struck-through list price → verify `referencePriceCents` is populated in the observation.
+4. **3 Best Buy PDPs** — pick 3 products with visible prices → `pnpm ops listing bestbuy <SKU>` for each (SKU = digits in the URL).
+5. Invite 5–10 beta testers after one successful real PDP round-trip.
+
 ## NEXT STEPS
 
-1. Owner Chrome install + first real PDP observation
+1. Owner Chrome install + first real PDP observation (procedure above)
 2. Wire GitHub canary/job secrets
-3. Optional Best Buy API key
-4. R2 archive upgrade later
-5. Invite 5–10 beta testers after one successful real PDP round-trip
+3. Optional Best Buy API key (Fly secret → `pricetruth-bestbuy-refresh` activates)
+4. R2 archive upgrade later (needs a valid Cloudflare token)
+5. Set Fly + Neon spend limits / add card as needed
