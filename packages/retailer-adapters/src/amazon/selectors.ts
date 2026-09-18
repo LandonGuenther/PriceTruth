@@ -62,8 +62,7 @@ export const AMAZON_SELECTORS = {
    * Elements Amazon hides from the rendered page (display:none etc.) - their
    * prices must never be adopted (e.g. the hidden SnS tier block).
    */
-  hiddenContainers:
-    ".aok-hidden, [hidden], [aria-hidden='true'], [style*='display:none'], [style*='display: none']",
+  hiddenContainers: ".aok-hidden, [hidden], [style*='display:none'], [style*='display: none']",
   /** Sponsored / cross-sell carousels (in addition to foreign-ASIN checks). */
   sponsoredContainers:
     "[data-component-type='sp-sponsored-result'], .AdHolder, #sponsoredProducts2_feature_div, #sp_detail, .sp_desktop_sponsored_label",
