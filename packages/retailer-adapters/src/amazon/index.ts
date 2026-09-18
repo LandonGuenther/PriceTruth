@@ -5,7 +5,7 @@ import {
 } from "@pricetruth/shared";
 import { ADAPTER_VERSION } from "../index.js";
 import type { ExtractionResult, RetailerAdapter } from "../types.js";
-import { AMAZON_SELECTORS as S, HIDDEN_PRICE_TEXT } from "./selectors.js";
+import { AMAZON_SELECTORS as S, HIDDEN_PRICE_TEXT, SNS_CTX } from "./selectors.js";
 
 const PATH_ID = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})/;
 
@@ -142,7 +142,16 @@ function usedOrMarketplacePrice(el: Element, warnings: string[]): boolean {
 }
 
 function snsPrice(el: Element): boolean {
-  return Boolean(el.closest(S.snsContainers));
+  return Boolean(el.closest(S.snsContainers)) || SNS_CTX.test(localText(el));
+}
+
+/** display:none / hidden price elements are never the visible product price. */
+function hiddenPrice(el: Element, warnings: string[]): boolean {
+  if (el.closest(S.hiddenContainers)) {
+    warnings.push("hidden price element ignored");
+    return true;
+  }
+  return false;
 }
 
 function sponsoredPrice(el: Element, warnings: string[]): boolean {
@@ -162,7 +171,8 @@ function isContaminated(el: Element, self: Set<string>, warnings: string[]): boo
     couponPrice(el, warnings) ||
     shippingPrice(el, warnings) ||
     usedOrMarketplacePrice(el, warnings) ||
-    sponsoredPrice(el, warnings)
+    sponsoredPrice(el, warnings) ||
+    hiddenPrice(el, warnings)
   );
 }
 
@@ -210,6 +220,18 @@ function extractPrice(doc: Document, warnings: string[], self: Set<string>): Pri
       warnings.push("price hidden until add-to-cart");
     } else {
       warnings.push("no price element matched");
+    }
+    return { kind: "none" };
+  }
+
+  // Never adopt a Subscribe & Save price as the one-time price: when every
+  // surviving candidate is SnS-tagged, report no price (this includes the
+  // single-candidate case).
+  const entriesAll = [...candidates.entries()];
+  if (entriesAll.length > 0 && entriesAll.every(([, meta]) => meta.sns)) {
+    warnings.push("only subscribe-and-save price found");
+    if (HIDDEN_PRICE_TEXT.test(text(doc.querySelector(S.hiddenPriceRegions)))) {
+      warnings.push("price hidden until add-to-cart");
     }
     return { kind: "none" };
   }

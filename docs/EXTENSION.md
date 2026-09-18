@@ -90,6 +90,10 @@ Known Amazon behaviors seen live (all expected, not bugs):
   `data-asin` subtree belonging to another ASIN (cross-sell carousels) are
   ignored, and "add to cart to see price" pages report `no_price`. Per-unit
   prices ("$0.27 / count") are likewise never adopted as the product price.
+  Prices inside display:none / hidden elements (e.g. a hidden
+  Subscribe & Save tier label like "$13.00 with 15 percent savings") are
+  ignored too — an all-SnS candidate set yields `no_price` rather than
+  adopting a recurring price (adapter 1.2.1).
 - `/dp/`, `/gp/product/` and `/gp/aw/d/` forms all ingest identically; revisits
   within the dedup window are accepted as duplicates.
 

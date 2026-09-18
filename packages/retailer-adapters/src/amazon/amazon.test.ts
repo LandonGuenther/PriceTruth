@@ -62,7 +62,7 @@ describe("extract", () => {
       schemaVersion: 1,
       priceType: "STANDARD",
       referenceType: "UNKNOWN",
-      extractorVersion: "1.2.0",
+      extractorVersion: "1.2.1",
     });
     expect(r.observation.variant).toEqual({ Size: "Large" });
   });
@@ -144,6 +144,25 @@ describe("extract", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.observation.priceCents).toBe(1299);
+  });
+
+  it("hidden SnS tier price is never adopted; hidden price → no_price", () => {
+    const doc = loadFixture("hidden-price-sns-tier.html");
+    const r = amazonAdapter.extract(doc, productUrl("B00MNV8E0C"), NOW);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("no_price");
+    expect(r.warnings).toContain("hidden price element ignored");
+    expect(r.warnings).toContain("price hidden until add-to-cart");
+  });
+
+  it("visible price wins; hidden SnS tier ignored", () => {
+    const doc = loadFixture("visible-price-sns-tier.html");
+    const r = amazonAdapter.extract(doc, productUrl("B00MNV8E0C"), NOW);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.observation.priceCents).toBe(1999);
+    expect(r.warnings).toContain("hidden price element ignored");
   });
 
   it("per-oz unit price ignored; pack price wins", () => {
