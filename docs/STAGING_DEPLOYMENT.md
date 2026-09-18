@@ -1,6 +1,6 @@
 # Staging deployment
 
-Status: IN PROGRESS (Fly.io target; blocked on `FLY_API_TOKEN` + `DATABASE_URL` in the Cursor agent)
+Status: **LIVE** — https://pricetruth-api-staging.fly.dev (Fly `iad`, Neon `pricetruth-staging` Postgres 16.15)
 
 See also: `docs/LIVE_BETA_REPORT.md`, `docs/START_TESTING.md`, `docs/COSTS.md`.
 
@@ -16,7 +16,7 @@ See also: `docs/LIVE_BETA_REPORT.md`, `docs/START_TESTING.md`, `docs/COSTS.md`.
 - Secrets via Fly secret store: `DATABASE_URL`, `INTERNAL_API_TOKEN` (≥32 chars),
   `ALLOWED_EXTENSION_IDS` (pinned id `hkpcfcjmogoaakoemandjkkdgnhpdejk`),
   `BESTBUY_API_KEY` (optional), `ARCHIVE_BACKEND=local`, `ARCHIVE_LOCAL_DIR=/data/archive`.
-- Archive: local on a 1 GB Fly volume (`pricetruth_archive` → `/data`). R2 is a
+- Archive: local on Fly volumes (see below — split across two volumes). R2 is a
   follow-up (previous Cloudflare token was invalid).
 - Release command: `pnpm exec prisma migrate deploy` before traffic switch.
 
@@ -29,12 +29,38 @@ See also: `docs/LIVE_BETA_REPORT.md`, `docs/START_TESTING.md`, `docs/COSTS.md`.
 5. Confirm `GET https://pricetruth-api-staging.fly.dev/health` and `/readiness` → 200.
 6. Smoke: synthetic observation POST, then `pnpm ops:status` with `PRICETRUTH_API_URL`.
 
-## Scheduled jobs
+`INTERNAL_API_TOKEN` was rotated 2026-09-18 and `DATABASE_URL` switched to the
+Neon direct endpoint; unauth `/internal/status` → 404, authorized → 200.
 
-- `.github/workflows/staging-canary.yml` - health/readiness (+ optional internal status).
-  Needs GitHub secrets: `STAGING_API_URL`, `STAGING_INTERNAL_API_TOKEN`.
-- `.github/workflows/staging-jobs.yml` - rollup / archive / bestbuy-refresh via
-  `fly ssh console`. Needs GitHub secrets: `FLY_API_TOKEN`, optional `FLY_APP_NAME`.
+## Scheduled jobs — Fly scheduled Machines (the real scheduler)
+
+Jobs run as Fly scheduled Machines in the same app (256 MB,
+`autostart=false`, metadata `fly_process_group=jobs`, `WORKDIR /app/apps/api`),
+created/refreshed by `scripts/fly-schedule-jobs.sh` (runs at the end of
+`deploy-staging.sh` so redeploys keep job images current):
+
+| Machine                      | Fly schedule | Command                                                          |
+| ---------------------------- | ------------ | ---------------------------------------------------------------- |
+| `pricetruth-rollup`          | hourly       | `pnpm jobs rollup`                                               |
+| `pricetruth-archive`         | daily        | `pnpm jobs archive` (volume `pricetruth_archive_jobs:/data`)     |
+| `pricetruth-bestbuy-refresh` | daily        | `pnpm jobs bestbuy-refresh --min-age-hours 6 --max-listings 200` |
+
+Fly "hourly/daily" schedules are relative to machine creation time
+(~00:22Z/00:24Z UTC), not fixed wall-clock hours.
+
+`pricetruth-bestbuy-refresh` printed `disabled (BESTBUY_API_KEY not set)` on its
+first run — it activates once `BESTBUY_API_KEY` is set as a Fly secret.
+
+**Archive volume split:** batches 1–4 (2026-09-11) live on the API machine's
+volume `pricetruth_archive`; batches 5+ live on the job machine's volume
+`pricetruth_archive_jobs`. Both are `local` backend — dedup reads only the
+writer's volume, so the split is historical, not a correctness issue.
+
+- `.github/workflows/staging-canary.yml` — health/readiness (+ optional internal
+  status), dormant until GitHub secrets `STAGING_API_URL`,
+  `STAGING_INTERNAL_API_TOKEN` are set (owner action).
+- `.github/workflows/staging-jobs.yml` — `workflow_dispatch` manual fallback
+  (no cron triggers); needs `FLY_API_TOKEN`, optional `FLY_APP_NAME`.
 
 ## CI hook
 

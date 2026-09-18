@@ -2,13 +2,13 @@
 
 ## What you need
 
-| Item | Value |
-|------|-------|
-| API hostname | `https://pricetruth-api-staging.fly.dev` |
-| Beta ZIP | `apps/extension/release/pricetruth-extension-0.1.0.zip` |
-| Extension version | `0.1.0` |
-| Extension ID | `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| ZIP SHA-256 | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
+| Item              | Value                                                              |
+| ----------------- | ------------------------------------------------------------------ |
+| API hostname      | `https://pricetruth-api-staging.fly.dev`                           |
+| Beta ZIP          | `apps/extension/release/pricetruth-extension-0.1.0.zip`            |
+| Extension version | `0.1.0`                                                            |
+| Extension ID      | `hkpcfcjmogoaakoemandjkkdgnhpdejk`                                 |
+| ZIP SHA-256       | `030eb7d5a52cc136be5aec5e4708d62424691257b6ecaf0834cbd8cb6967cca0` |
 
 ## Install (Chrome)
 
@@ -23,12 +23,18 @@
 9. Confirm an observation landed:
 
 ```bash
-export PRICETRUTH_API_URL=https://pricetruth-api-staging.fly.dev
-export INTERNAL_API_TOKEN=<from Fly secrets / password manager>
-pnpm ops:status
-# or:
-pnpm ops remote
+PRICETRUTH_API_URL=https://pricetruth-api-staging.fly.dev \
+  INTERNAL_API_TOKEN=<token> pnpm ops:status
+# or: pnpm ops remote
 ```
+
+The token is the Devin secret `PRICETRUTH_STAGING_INTERNAL_API_TOKEN` /
+the Fly secret `INTERNAL_API_TOKEN` (rotated 2026-09-18). Never commit it —
+it lives only in Fly secrets / password manager / Devin secrets.
+
+Other read-only checks: `pnpm ops recent --limit 10`, `pnpm ops jobs`,
+`pnpm ops listing <retailer> <externalId>` (local DB only — these need
+`DATABASE_URL`; for the live DB use `pnpm ops:status`).
 
 ## Quick API checks
 
@@ -43,14 +49,14 @@ Expect health and readiness HTTP 200. Unauthenticated `/internal/status` must no
 
 ## Troubleshooting
 
-| Symptom | Check |
-|---------|-------|
-| Side panel empty / network error | Rebuild with `VITE_API_BASE_URL=https://pricetruth-api-staging.fly.dev` |
-| CORS / blocked fetch | Fly secret `ALLOWED_EXTENSION_IDS` must include `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
-| Readiness 503 | Neon connectivity or pending migrations |
-| Internal status 404 | Missing/wrong `INTERNAL_API_TOKEN` |
-| No observation on ambiguous/no price | Expected - extension must not POST |
-| Fly app sleeping | Staging uses `auto_stop_machines=off` + min 1 machine |
+| Symptom                              | Check                                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| Side panel empty / network error     | Rebuild with `VITE_API_BASE_URL=https://pricetruth-api-staging.fly.dev`            |
+| CORS / blocked fetch                 | Fly secret `ALLOWED_EXTENSION_IDS` must include `hkpcfcjmogoaakoemandjkkdgnhpdejk` |
+| Readiness 503                        | Neon connectivity or pending migrations                                            |
+| Internal status 404                  | Missing/wrong `INTERNAL_API_TOKEN`                                                 |
+| No observation on ambiguous/no price | Expected - extension must not POST                                                 |
+| Fly app sleeping                     | Staging uses `auto_stop_machines=off` + min 1 machine                              |
 
 ## How do I know PriceTruth is down?
 
