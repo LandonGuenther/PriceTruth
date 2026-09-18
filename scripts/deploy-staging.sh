@@ -12,6 +12,11 @@
 #
 # Usage (from repo root):
 #   ./scripts/deploy-staging.sh
+#
+# After a successful deploy + smoke check this also runs
+# scripts/fly-schedule-jobs.sh, which updates the Fly scheduled job Machines
+# (pricetruth-rollup / pricetruth-archive / pricetruth-bestbuy-refresh) to the
+# just-deployed image — so a redeploy never leaves jobs on a stale image.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -122,6 +127,10 @@ if [ "$ok" != "200" ]; then
   echo "authenticated internal status failed" >&2
   exit 1
 fi
+
+echo "== job machines =="
+# Refresh scheduled job Machines to the new image (idempotent).
+"$ROOT/scripts/fly-schedule-jobs.sh"
 
 echo "== done =="
 echo "Export for follow-up steps (owner/agent):"
